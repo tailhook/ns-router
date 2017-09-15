@@ -12,7 +12,7 @@ version = "0.1.0"
 authors = ["paul@colomiets.name"]
 
 [dependencies]
-abstract-ns = { git="https://github.com/tailhook/abstract-ns", branch="striped" }
+abstract-ns = { git="https://github.com/tailhook/abstract-ns", branch="host_service_split" }
 log = "0.3.8"
 futures = "0.1.14"
 tokio-core = "0.1.9"
