@@ -1,0 +1,18 @@
+[package]
+name = "ns-router"
+description = """
+    A configurable name resolver for abstract-ns
+"""
+license = "MIT/Apache-2.0"
+readme = "README.md"
+keywords = ["name", "service", "dns", "service", "discovery"]
+homepage = "http://github.com/tailhook/ns-router"
+documentation = "http://docs.rs/ns-router"
+version = "0.1.0"
+authors = ["paul@colomiets.name"]
+
+[dependencies]
+abstract-ns = { git="https://github.com/tailhook/abstract-ns", branch="striped" }
+log = "0.3.8"
+futures = "0.1.14"
+tokio-core = "0.1.9"
