@@ -11,8 +11,8 @@ use abstract_ns::{Name, Address};
 /// a stream of configs.
 #[derive(Clone, Debug)]
 pub struct Config {
-    hosts: HashMap<Name, Vec<IpAddr>>,
-    services: HashMap<Name, Address>,
+    pub(crate) hosts: HashMap<Name, Vec<IpAddr>>,
+    pub(crate) services: HashMap<Name, Address>,
 }
 
 impl Config {

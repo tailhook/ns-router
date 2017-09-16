@@ -7,10 +7,11 @@ extern crate abstract_ns;
 extern crate futures;
 extern crate void;
 
-mod config;
-mod slot;  // TODO(tailhook) it should be added to futures-rs
-mod router;
 mod abstract_impl;
+mod config;
+mod internal;
+mod router;
+mod slot;  // TODO(tailhook) it should be added to futures-rs
 
 pub use router::Router;
 pub use config::Config;
