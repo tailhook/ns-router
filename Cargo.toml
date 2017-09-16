@@ -16,3 +16,4 @@ abstract-ns = { git="https://github.com/tailhook/abstract-ns", branch="host_serv
 log = "0.3.8"
 futures = "0.1.14"
 tokio-core = "0.1.9"
+void = "1.0.2"
