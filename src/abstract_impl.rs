@@ -9,9 +9,16 @@ use void::Void;
 use slot;
 use router::Router;
 
+#[derive(Debug)]
 pub struct ResolveHostFuture(oneshot::Receiver<Result<Vec<IpAddr>, Error>>);
+
+#[derive(Debug)]
 pub struct ResolveFuture(oneshot::Receiver<Result<Address, Error>>);
+
+#[derive(Debug)]
 pub struct HostStream(slot::Receiver<Vec<IpAddr>>);
+
+#[derive(Debug)]
 pub struct AddrStream(slot::Receiver<Address>);
 
 
@@ -49,6 +56,7 @@ impl Subscribe for Router {
 impl Future for ResolveHostFuture {
     type Item = Vec<IpAddr>;
     type Error = Error;
+    #[inline(always)]
     fn poll(&mut self) -> Result<Async<Vec<IpAddr>>, Error> {
         match self.0.poll().map_err(|e| Error::TemporaryError(e.into()))? {
             Async::NotReady => Ok(Async::NotReady),
@@ -61,6 +69,7 @@ impl Future for ResolveHostFuture {
 impl Future for ResolveFuture {
     type Item = Address;
     type Error = Error;
+    #[inline(always)]
     fn poll(&mut self) -> Result<Async<Address>, Error> {
         match self.0.poll().map_err(|e| Error::TemporaryError(e.into()))? {
             Async::NotReady => Ok(Async::NotReady),
@@ -73,6 +82,7 @@ impl Future for ResolveFuture {
 impl Stream for HostStream {
     type Item = Vec<IpAddr>;
     type Error = Void;
+    #[inline(always)]
     fn poll(&mut self) -> Result<Async<Option<Vec<IpAddr>>>, Void> {
         match self.0.poll() {
             Ok(r) => Ok(r),
@@ -84,6 +94,7 @@ impl Stream for HostStream {
 impl Stream for AddrStream {
     type Item = Address;
     type Error = Void;
+    #[inline(always)]
     fn poll(&mut self) -> Result<Async<Option<Address>>, Void> {
         match self.0.poll() {
             Ok(r) => Ok(r),
