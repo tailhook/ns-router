@@ -5,6 +5,7 @@ use config::Config;
 use void::Void;
 
 
+#[derive(Debug)]
 pub struct Table {
 }
 
