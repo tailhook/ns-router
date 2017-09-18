@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::{Stream, Future};
 use futures::future::{empty};
-use futures::stream::{iter_ok, once};
+use futures::stream::{once};
 use internal::Table;
 use tokio_core::reactor::Handle;
 use void::Void;
@@ -12,6 +12,10 @@ use slot;
 
 
 /// An actual router class
+///
+/// Note: when router is shut down (when config stream is closed), all futures
+/// and subscriptions are canceled. We'll probably do the same when all
+/// router instances are dropped too.
 #[derive(Debug, Clone)]
 pub struct Router(pub(crate) Arc<Table>);
 

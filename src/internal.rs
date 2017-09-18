@@ -4,6 +4,7 @@ use std::net::IpAddr;
 use abstract_ns::{Name, Error, Address};
 use futures::Stream;
 use futures::sync::oneshot;
+use futures::sync::mpsc::{UnboundedSender, unbounded};
 use tokio_core::reactor::Handle;
 
 use cell::ConfigCell;
@@ -14,18 +15,30 @@ use void::Void;
 
 
 #[derive(Debug)]
+pub enum Request {
+    ResolveHost(Name, oneshot::Sender<Result<Vec<IpAddr>, Error>>),
+    Resolve(Name, oneshot::Sender<Result<Address, Error>>),
+    HostSubscribe(Name, slot::Sender<Vec<IpAddr>>),
+    Subscribe(Name, slot::Sender<Address>),
+}
+
+
+#[derive(Debug)]
 pub struct Table {
     pub cfg: ConfigCell,
+    pub requests: UnboundedSender<Request>,
 }
 
 impl Table {
     pub fn new<S>(stream: S, handle: &Handle) -> Arc<Table>
         where S: Stream<Item=Arc<Config>, Error=Void> + 'static
     {
+        let (tx, rx) = unbounded();
         let table = Arc::new(Table {
             cfg: ConfigCell::new(),
+            requests: tx,
         });
-        handle.spawn(ResolverFuture::new(stream, &table, &handle));
+        handle.spawn(ResolverFuture::new(stream, rx, &table, &handle));
         return table;
     }
 
