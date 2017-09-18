@@ -1,12 +1,14 @@
 use std::sync::Arc;
 use std::net::IpAddr;
 
+use abstract_ns::{Name, Error, Address};
 use futures::Stream;
 use futures::sync::oneshot;
-use abstract_ns::{Name, Error, Address};
+use tokio_core::reactor::Handle;
 
-use slot;
 use config::Config;
+use coroutine::ResolverFuture;
+use slot;
 use void::Void;
 
 
@@ -15,10 +17,13 @@ pub struct Table {
 }
 
 impl Table {
-    pub fn new<S>(stream: S) -> Table
-        where S: Stream<Item=Arc<Config>, Error=Void>
+    pub fn new<S>(stream: S, handle: &Handle) -> Arc<Table>
+        where S: Stream<Item=Arc<Config>, Error=Void> + 'static
     {
-        unimplemented!();
+        let table = Arc::new(Table {
+        });
+        handle.spawn(ResolverFuture::new(stream, &table, &handle));
+        return table;
     }
 
     pub fn resolve_host(&self, name: &Name,

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use futures::Stream;
 use futures::stream::iter_ok;
 use internal::Table;
+use tokio_core::reactor::Handle;
 use void::Void;
 
 use config::Config;
@@ -21,8 +22,8 @@ pub struct UpdateSink(slot::Sender<Arc<Config>>);
 impl Router {
 
     /// Create a router for a static config
-    pub fn from_config(config: &Arc<Config>) -> Router {
-        Router(Arc::new(Table::new(iter_ok(vec![config.clone()]))))
+    pub fn from_config(config: &Arc<Config>, handle: &Handle) -> Router {
+        Router(Table::new(iter_ok(vec![config.clone()]), handle))
     }
 
     /// Create a router with updating config
@@ -30,18 +31,20 @@ impl Router {
     /// Note: router is defunctional until first config is received in a
     /// stream. By defunctional we mean that every request will wait, until
     /// configured.
-    pub fn from_stream<S>(stream: S) -> Router
-        where S: Stream<Item=Arc<Config>, Error=Void>
+    pub fn from_stream<S>(stream: S, handle: &Handle) -> Router
+        where S: Stream<Item=Arc<Config>, Error=Void> + 'static
     {
-        Router(Arc::new(Table::new(stream)))
+        Router(Table::new(stream, handle))
     }
 
     /// Create a router and update channel
-    pub fn updating_config(config: &Arc<Config>) -> (Router, UpdateSink) {
+    pub fn updating_config(config: &Arc<Config>, handle: &Handle)
+        -> (Router, UpdateSink)
+    {
         let (tx, rx) = slot::channel();
         let stream = iter_ok(vec![config.clone()]).chain(rx)
             .map_err(|_| unreachable!());
-        return (Router(Arc::new(Table::new(stream))), UpdateSink(tx));
+        return (Router(Table::new(stream, handle)), UpdateSink(tx));
     }
 }
 
