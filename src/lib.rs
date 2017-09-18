@@ -9,6 +9,7 @@ extern crate tokio_core;
 extern crate void;
 
 mod abstract_impl;
+mod cell;
 mod config;
 mod coroutine;
 mod internal;

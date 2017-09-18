@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::{Stream, Future, Async};
 use tokio_core::reactor::Handle;
-use void::Void;
+use void::{Void, unreachable};
 
 use internal::Table;
 use config::Config;
@@ -33,6 +33,12 @@ impl<S> Future for ResolverFuture<S>
     type Item = ();
     type Error = ();
     fn poll(&mut self) -> Result<Async<()>, ()> {
-        unimplemented!();
+        match self.stream.poll() {
+            Ok(Async::Ready(Some(c))) => self.table.cfg.put(&c),
+            Ok(Async::Ready(None)) => return Ok(Async::Ready(())),
+            Ok(Async::NotReady) => {},
+            Err(e) => unreachable(e),
+        }
+        Ok(Async::NotReady)
     }
 }

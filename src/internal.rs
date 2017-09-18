@@ -6,6 +6,7 @@ use futures::Stream;
 use futures::sync::oneshot;
 use tokio_core::reactor::Handle;
 
+use cell::ConfigCell;
 use config::Config;
 use coroutine::ResolverFuture;
 use slot;
@@ -14,6 +15,7 @@ use void::Void;
 
 #[derive(Debug)]
 pub struct Table {
+    pub cfg: ConfigCell,
 }
 
 impl Table {
@@ -21,6 +23,7 @@ impl Table {
         where S: Stream<Item=Arc<Config>, Error=Void> + 'static
     {
         let table = Arc::new(Table {
+            cfg: ConfigCell::new(),
         });
         handle.spawn(ResolverFuture::new(stream, &table, &handle));
         return table;
