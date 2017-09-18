@@ -32,12 +32,36 @@ impl Table {
     pub fn resolve_host(&self, name: &Name,
         tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
     {
+        // shortcut if config exists and this is an in-memory host
+        if let Some(cfg) = self.cfg.get() {
+            if let Some(value) = cfg.hosts.get(name) {
+                tx.send(Ok(value.clone()))
+                    .map_err(|_| {
+                        trace!("{:?} resolved into {:?} but dropped",
+                            name, value);
+                    })
+                    .ok();
+                return;
+            }
+        }
         unimplemented!();
     }
 
     pub fn resolve(&self, name: &Name,
         tx: oneshot::Sender<Result<Address, Error>>)
     {
+        // shortcut if config exists and this is an in-memory host
+        if let Some(cfg) = self.cfg.get() {
+            if let Some(value) = cfg.services.get(name) {
+                tx.send(Ok(value.clone()))
+                    .map_err(|value| {
+                        trace!("{:?} resolved into {:?} but dropped",
+                            name, value);
+                    })
+                    .ok();
+                return;
+            }
+        }
         unimplemented!();
     }
 

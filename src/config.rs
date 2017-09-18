@@ -17,6 +17,14 @@ pub struct Config {
 
 impl Config {
 
+    /// Create a new, empty config
+    pub fn new() -> Config {
+        Config {
+            hosts: HashMap::new(),
+            services: HashMap::new(),
+        }
+    }
+
     /// Add a host that will be resolved to list of addreses
     ///
     /// Hosts added by this host method overrides any other resolvers.

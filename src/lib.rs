@@ -7,6 +7,7 @@ extern crate abstract_ns;
 extern crate futures;
 extern crate tokio_core;
 extern crate void;
+#[macro_use] extern crate log;
 
 mod abstract_impl;
 mod cell;
