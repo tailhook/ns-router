@@ -49,7 +49,7 @@ impl UpdateSink {
     /// Update a config
     ///
     /// Returns `true` if send worked (meaning router is still alive).
-    fn update(&self, config: &Arc<Config>) -> bool {
+    pub fn update(&self, config: &Arc<Config>) -> bool {
         self.0.swap(config.clone()).is_ok()
     }
 }
