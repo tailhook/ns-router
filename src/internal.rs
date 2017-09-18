@@ -1,10 +1,11 @@
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::net::IpAddr;
 
 use abstract_ns::{Name, Error, Address};
 use futures::Stream;
 use futures::sync::oneshot;
-use futures::sync::mpsc::{UnboundedSender, unbounded};
+use futures::sync::mpsc::{UnboundedSender, unbounded, SendError};
 use tokio_core::reactor::Handle;
 
 use cell::ConfigCell;
@@ -48,16 +49,22 @@ impl Table {
         // shortcut if config exists and this is an in-memory host
         if let Some(cfg) = self.cfg.get() {
             if let Some(value) = cfg.hosts.get(name) {
-                tx.send(Ok(value.clone()))
-                    .map_err(|_| {
-                        trace!("{:?} resolved into {:?} but dropped",
-                            name, value);
-                    })
-                    .ok();
+                reply(name, tx, value.clone());
                 return;
             }
         }
-        unimplemented!();
+        match self.requests.unbounded_send(
+            Request::ResolveHost(name.clone(), tx))
+        {
+            Ok(()) => {}
+            Err(e) => match e.into_inner() {
+                Request::ResolveHost(name, tx) => {
+                    fail(&name, tx, Error::TemporaryError(
+                        "Resolver is down".into()));
+                }
+                _ => unreachable!(),
+            }
+        }
     }
 
     pub fn resolve(&self, name: &Name,
@@ -66,12 +73,7 @@ impl Table {
         // shortcut if config exists and this is an in-memory host
         if let Some(cfg) = self.cfg.get() {
             if let Some(value) = cfg.services.get(name) {
-                tx.send(Ok(value.clone()))
-                    .map_err(|value| {
-                        trace!("{:?} resolved into {:?} but dropped",
-                            name, value);
-                    })
-                    .ok();
+                reply(name, tx, value.clone());
                 return;
             }
         }
@@ -87,4 +89,26 @@ impl Table {
     pub fn subscribe(&self, name: &Name, tx: slot::Sender<Address>) {
         unimplemented!();
     }
+}
+
+pub fn reply<X: Send + Debug + 'static>(name: &Name,
+    tx: oneshot::Sender<Result<X, Error>>, value: X)
+{
+    tx.send(Ok(value))
+        .map_err(|value| {
+            trace!("{:?} resolved into {:?} but dropped",
+                name, value.unwrap());
+        })
+        .ok();
+}
+
+pub fn fail<X: Debug>(name: &Name,
+    tx: oneshot::Sender<Result<X, Error>>, error: Error)
+{
+    tx.send(Err(error))
+        .map_err(|err| {
+            trace!("{:?} resolved into, error but dropped: {}",
+                name, err.unwrap_err());
+        })
+        .ok();
 }

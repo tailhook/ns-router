@@ -14,6 +14,7 @@ mod cell;
 mod config;
 mod coroutine;
 mod internal;
+mod internal_traits;
 mod router;
 mod slot;  // TODO(tailhook) it should be added to futures-rs
 
