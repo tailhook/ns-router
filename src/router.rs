@@ -11,7 +11,7 @@ use slot;
 
 /// An actual router class
 #[derive(Debug, Clone)]
-pub struct Router(Arc<Table>);
+pub struct Router(pub(crate) Arc<Table>);
 
 /// A sink that updates router created using `Router::updating_config`
 #[derive(Debug, Clone)]

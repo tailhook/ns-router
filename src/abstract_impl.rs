@@ -25,14 +25,18 @@ pub struct AddrStream(slot::Receiver<Address>);
 impl ResolveHost for Router {
     type FutureHost = ResolveHostFuture;
     fn resolve_host(&self, name: &Name) -> ResolveHostFuture {
-        unimplemented!();
+        let (tx, rx) = oneshot::channel();
+        self.0.resolve_host(name, tx);
+        ResolveHostFuture(rx)
     }
 }
 
 impl Resolve for Router {
     type Future = ResolveFuture;
     fn resolve(&self, name: &Name) -> ResolveFuture {
-        unimplemented!();
+        let (tx, rx) = oneshot::channel();
+        self.0.resolve(name, tx);
+        ResolveFuture(rx)
     }
 
 }
@@ -41,7 +45,9 @@ impl HostSubscribe for Router {
     type Error = Void;
     type HostStream = HostStream;
     fn subscribe_host(&self, name: &Name) -> HostStream {
-        unimplemented!();
+        let (tx, rx) = slot::channel();
+        self.0.subscribe_host(name, tx);
+        HostStream(rx)
     }
 }
 
@@ -49,7 +55,9 @@ impl Subscribe for Router {
     type Error = Void;
     type Stream = AddrStream;
     fn subscribe(&self, name: &Name) -> AddrStream {
-        unimplemented!();
+        let (tx, rx) = slot::channel();
+        self.0.subscribe(name, tx);
+        AddrStream(rx)
     }
 }
 
