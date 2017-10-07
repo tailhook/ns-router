@@ -192,22 +192,6 @@ impl<T> SendError<T> {
 /// first value sent (and erroring on sender side) it replaces value if
 /// consumer is not fast enough and preserves last values sent on any
 /// poll of a stream.
-///
-/// # Example
-///
-/// ```
-/// use std::thread;
-/// use futures::prelude::*;
-/// use futures::stream::iter_ok;
-/// use futures::sync::slot;
-///
-/// let (tx, rx) = slot::channel::<i32>();
-///
-/// tx.send_all(iter_ok(vec![1, 2, 3])).wait();
-///
-/// let received = rx.collect().wait().unwrap();
-/// assert_eq!(received, vec![3]);
-/// ```
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let inner = Arc::new(Mutex::new(Inner {
         value: None,
