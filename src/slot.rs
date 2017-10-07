@@ -1,5 +1,6 @@
 //! An unbounded channel that only stores last value sent
 
+use std::mem;
 use std::sync::{Arc, Weak, Mutex};
 
 use futures::task::{self, Task};
@@ -17,7 +18,7 @@ use futures::{Sink, Stream, AsyncSink, Async, Poll, StartSend};
 /// other ones are discarded.
 #[derive(Debug)]
 pub struct Sender<T> {
-    inner: Option<Weak<Mutex<Inner<T>>>>,
+    inner: Weak<Mutex<Inner<T>>>,
 }
 
 /// The receiving end of a channel which preserves only the last value
@@ -34,10 +35,11 @@ pub struct SendError<T>(T);
 #[derive(Debug)]
 struct Inner<T> {
     value: Option<T>,
-    task: Option<Task>,
+    read_task: Option<Task>,
+    cancel_task: Option<Task>,
 }
 
-trait AssertKindsSender: Send + Sync + Clone {}
+trait AssertKindsSender: Send + Sync {}
 impl AssertKindsSender for Sender<u32> {}
 
 trait AssertKindsReceiver: Send + Sync {}
@@ -45,18 +47,33 @@ impl AssertKindsReceiver for Receiver<u32> {}
 
 impl<T> Sender<T> {
     /// Sets the new new value of the stream and notifies the consumer if any
+    ///
+    /// This function will store the `value` provided as the current value for
+    /// this channel, replacing any previous value that may have been there. If
+    /// the receiver may still be able to receive this message, then `Ok` is
+    /// returned with the previous value that was in this channel.
+    ///
+    /// If `Ok(Some)` is returned then this value overwrote a previous value,
+    /// and the value was never received by the receiver. If `Ok(None)` is
+    /// returned, then no previous value was found and the `value` is queued up
+    /// to be received by the receiver.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an `Err` if the receiver has gone away and
+    /// it's impossible to send this value to the receiver. The error returned
+    /// retains ownership of the `value` provided and can be extracted, if
+    /// necessary.
     pub fn swap(&self, value: T) -> Result<Option<T>, SendError<T>> {
         let result;
         // Do this step first so that the lock is dropped when
         // `unpark` is called
         let task = {
-            let strong = self.inner.as_ref()
-                .expect("sending to a closed slot");
-            if let Some(ref lock) = strong.upgrade() {
+            if let Some(ref lock) = self.inner.upgrade() {
                 let mut inner = lock.lock().unwrap();
                 result = inner.value.take();
                 inner.value = Some(value);
-                inner.task.take()
+                inner.read_task.take()
             } else {
                 return Err(SendError(value));
             }
@@ -65,6 +82,39 @@ impl<T> Sender<T> {
             task.notify();
         }
         return Ok(result);
+    }
+    /// Polls this `Sender` half to detect whether the `Receiver` this has
+    /// paired with has gone away.
+    ///
+    /// This function can be used to learn about when the `Receiver` (consumer)
+    /// half has gone away and nothing will be able to receive a message sent
+    /// from `send` (or `swap`).
+    ///
+    /// If `Ready` is returned then it means that the `Receiver` has disappeared
+    /// and the result this `Sender` would otherwise produce should no longer
+    /// be produced.
+    ///
+    /// If `NotReady` is returned then the `Receiver` is still alive and may be
+    /// able to receive a message if sent. The current task, however, is
+    /// scheduled to receive a notification if the corresponding `Receiver` goes
+    /// away.
+    ///
+    /// # Panics
+    ///
+    /// Like `Future::poll`, this function will panic if it's not called from
+    /// within the context of a task. In other words, this should only ever be
+    /// called from inside another future.
+    ///
+    /// If you're calling this function from a context that does not have a
+    /// task, then you can use the `is_canceled` API instead.
+    pub fn poll_cancel(&mut self) -> Poll<(), ()> {
+        if let Some(ref lock) = self.inner.upgrade() {
+            let mut inner = lock.lock().unwrap();
+            inner.cancel_task = Some(task::current());
+            Ok(Async::NotReady)
+        } else {
+            Ok(Async::Ready(()))
+        }
     }
 }
 
@@ -82,14 +132,11 @@ impl<T> Sink for Sender<T> {
         // Do this step first so that the lock is dropped *and*
         // weakref is dropped when `unpark` is called
         let task = {
-            if let Some(weak) = self.inner.take() {
-                if let Some(ref lock) = weak.upgrade() {
-                    drop(weak);
-                    let mut inner = lock.lock().unwrap();
-                    inner.task.take()
-                } else {
-                    None
-                }
+            let weak = mem::replace(&mut self.inner, Weak::new());
+            if let Some(ref lock) = weak.upgrade() {
+                drop(weak);
+                let mut inner = lock.lock().unwrap();
+                inner.read_task.take()
             } else {
                 None
             }
@@ -116,20 +163,26 @@ impl<T> Stream for Receiver<T> {
         let result = {
             let mut inner = self.inner.lock().unwrap();
             if inner.value.is_none() {
-                inner.task = Some(task::current());
+                if Arc::weak_count(&self.inner) == 0 {
+                    // no senders, terminate the stream
+                    return Ok(Async::Ready(None));
+                } else {
+                    inner.read_task = Some(task::current());
+                }
             }
             inner.value.take()
         };
-        let is_only_reference = Arc::get_mut(&mut self.inner).is_some();
         match result {
             Some(value) => Ok(Async::Ready(Some(value))),
-            None if is_only_reference => {
-                self.inner.lock().unwrap().task.take();
-                // no senders, terminate the stream
-                return Ok(Async::Ready(None));
-            }
             None => Ok(Async::NotReady),
         }
+    }
+}
+
+impl<T> SendError<T> {
+    /// Returns the message that was attempted to be sent but failed.
+    pub fn into_inner(self) -> T {
+        self.0
     }
 }
 
@@ -139,17 +192,28 @@ impl<T> Stream for Receiver<T> {
 /// first value sent (and erroring on sender side) it replaces value if
 /// consumer is not fast enough and preserves last values sent on any
 /// poll of a stream.
+///
+/// # Example
+///
+/// ```
+/// use std::thread;
+/// use futures::prelude::*;
+/// use futures::stream::iter_ok;
+/// use futures::sync::slot;
+///
+/// let (tx, rx) = slot::channel::<i32>();
+///
+/// tx.send_all(iter_ok(vec![1, 2, 3])).wait();
+///
+/// let received = rx.collect().wait().unwrap();
+/// assert_eq!(received, vec![3]);
+/// ```
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let inner = Arc::new(Mutex::new(Inner {
         value: None,
-        task: None,
+        read_task: None,
+        cancel_task: None,
     }));
-    return (Sender { inner: Some(Arc::downgrade(&inner)) },
+    return (Sender { inner: Arc::downgrade(&inner) },
             Receiver { inner: inner });
-}
-
-impl<T> Clone for Sender<T> {
-    fn clone(&self) -> Sender<T> {
-        Sender { inner: self.inner.clone() }
-    }
 }

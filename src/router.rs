@@ -20,7 +20,7 @@ use slot;
 pub struct Router(pub(crate) Arc<Table>);
 
 /// A sink that updates router created using `Router::updating_config`
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UpdateSink(slot::Sender<Arc<Config>>);
 
 
