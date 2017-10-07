@@ -77,7 +77,18 @@ impl Table {
                 return;
             }
         }
-        unimplemented!();
+        match self.requests.unbounded_send(
+            Request::Resolve(name.clone(), tx))
+        {
+            Ok(()) => {}
+            Err(e) => match e.into_inner() {
+                Request::Resolve(name, tx) => {
+                    fail(&name, tx, Error::TemporaryError(
+                        "Resolver is down".into()));
+                }
+                _ => unreachable!(),
+            }
+        }
     }
 
     pub fn subscribe_host(&self, name: &Name,

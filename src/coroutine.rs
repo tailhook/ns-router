@@ -9,7 +9,7 @@ use tokio_core::reactor::Handle;
 use void::{Void, unreachable};
 
 use config::Config;
-use internal::{Table, Request};
+use internal::{Table, Request, reply, fail};
 use slot;
 
 
@@ -37,12 +37,32 @@ impl<S> ResolverFuture<S> {
     fn resolve_host(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
     {
-        unimplemented!();
+        // need to retry resolving static host because the config might just
+        // arrived right now
+        if let Some(value) = cfg.hosts.get(&name) {
+            reply(&name, tx, value.clone());
+            return;
+        }
+        if let Some(ref res) = cfg.host_resolver {
+            res.resolve_host(cfg, name, tx);
+        } else {
+            fail(&name, tx, Error::NameNotFound);
+        }
     }
     fn resolve(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Address, Error>>)
     {
-        unimplemented!();
+        // need to retry resolving static host because the config might just
+        // arrived right now
+        if let Some(value) = cfg.services.get(&name) {
+            reply(&name, tx, value.clone());
+            return;
+        }
+        if let Some(ref res) = cfg.resolver {
+            res.resolve(cfg, name, tx);
+        } else {
+            fail(&name, tx, Error::NameNotFound);
+        }
     }
     fn host_subscribe(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Vec<IpAddr>>)

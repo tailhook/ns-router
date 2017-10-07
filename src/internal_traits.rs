@@ -14,11 +14,12 @@ use config::Config;
 use slot;
 
 
-pub trait Resolver: Debug + 'static {
+pub trait HostResolver: Debug + 'static {
     fn resolve_host(&self, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>);
 }
-pub trait HostResolver: Debug + 'static {
+
+pub trait Resolver: Debug + 'static {
     fn resolve(&self, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Address, Error>>);
 }
@@ -39,7 +40,7 @@ pub struct ResolveHostWrapper<R: ResolveHost> {
     futures: Mutex<FuturesUnordered<SendResult<R::FutureHost>>>,
 }
 
-impl<R: ResolveHost + Debug + 'static> Resolver for ResolveHostWrapper<R> {
+impl<R: ResolveHost + Debug + 'static> HostResolver for ResolveHostWrapper<R> {
     fn resolve_host(&self, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
     {
@@ -69,6 +70,49 @@ impl<R: ResolveHost + Debug + 'static> ResolveHostWrapper<R> {
 impl<R: ResolveHost + Debug + 'static> fmt::Debug for ResolveHostWrapper<R> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("ResolveHostWrapper")
+        .field("resolver", &self.resolver)
+        .field("futures", &self.futures.lock()
+            .map(|x| x.len())
+            .unwrap_or_else(|x| x.get_ref().len()))
+        .finish()
+    }
+}
+
+pub struct ResolveWrapper<R: Resolve> {
+    resolver: R,
+    futures: Mutex<FuturesUnordered<SendResult<R::Future>>>,
+}
+
+impl<R: Resolve + Debug + 'static> Resolver for ResolveWrapper<R> {
+    fn resolve(&self, cfg: &Arc<Config>,
+        name: Name, tx: oneshot::Sender<Result<Address, Error>>)
+    {
+        let mut future = self.resolver.resolve(&name);
+        match future.poll() {
+            Ok(Async::Ready(v)) => reply(&name, tx, v),
+            Ok(Async::NotReady) => {
+                self.futures.lock().expect("futures not poisoned")
+                    .push(SendResult(name, future, Some(tx)));
+            }
+            Err(e) => {
+                tx.send(Err(e)).ok();
+            }
+        }
+    }
+}
+
+impl<R: Resolve + Debug + 'static> ResolveWrapper<R> {
+    pub fn new(resolver: R) -> ResolveWrapper<R> {
+        ResolveWrapper {
+            resolver,
+            futures: Mutex::new(FuturesUnordered::new()),
+        }
+    }
+}
+
+impl<R: Resolve + Debug + 'static> fmt::Debug for ResolveWrapper<R> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ResolveWrapper")
         .field("resolver", &self.resolver)
         .field("futures", &self.futures.lock()
             .map(|x| x.len())
