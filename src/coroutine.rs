@@ -43,6 +43,17 @@ impl<S> ResolverFuture<S> {
             reply(&name, tx, value.clone());
             return;
         }
+        if let Some(ref res) = cfg.host_suffixes.get(name.as_ref()) {
+            res.resolve_host(cfg, name, tx);
+            return;
+        }
+        for (idx, _) in name.as_ref().match_indices('.') {
+            let opt_res = cfg.host_suffixes.get(&name.as_ref()[idx+1..]);
+            if let Some(ref res) = opt_res {
+                res.resolve_host(cfg, name.clone(), tx);
+                return
+            }
+        }
         if let Some(ref res) = cfg.host_resolver {
             res.resolve_host(cfg, name, tx);
         } else {
@@ -57,6 +68,16 @@ impl<S> ResolverFuture<S> {
         if let Some(value) = cfg.services.get(&name) {
             reply(&name, tx, value.clone());
             return;
+        }
+        if let Some(ref res) = cfg.suffixes.get(name.as_ref()) {
+            res.resolve(cfg, name, tx);
+            return;
+        }
+        for (idx, _) in name.as_ref().match_indices('.') {
+            if let Some(ref res) = cfg.suffixes.get(&name.as_ref()[idx+1..]) {
+                res.resolve(cfg, name.clone(), tx);
+                return
+            }
         }
         if let Some(ref res) = cfg.resolver {
             res.resolve(cfg, name, tx);

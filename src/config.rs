@@ -17,6 +17,8 @@ use internal_traits::{ResolveHostWrapper, ResolveWrapper};
 pub struct Config {
     pub(crate) hosts: HashMap<Name, Vec<IpAddr>>,
     pub(crate) services: HashMap<Name, Address>,
+    pub(crate) host_suffixes: HashMap<String, Arc<HostResolver>>,
+    pub(crate) suffixes: HashMap<String, Arc<Resolver>>,
     pub(crate) host_resolver: Option<Arc<HostResolver>>,
     pub(crate) resolver: Option<Arc<Resolver>>,
 }
@@ -30,6 +32,8 @@ impl Config {
             services: HashMap::new(),
             host_resolver: None,
             resolver: None,
+            host_suffixes: HashMap::new(),
+            suffixes: HashMap::new(),
         }
     }
 
@@ -49,6 +53,19 @@ impl Config {
         self
     }
 
+    /// Adds a host resolver used for a specific suffix
+    ///
+    /// Suffix should be specified without dot `.` at the start.
+    pub fn add_host_suffix<S, R>(&mut self, suffix: S, resolver: R)
+        -> &mut Self
+        where S: Into<String>,
+              R: ResolveHost + Debug + 'static
+    {
+        self.host_suffixes.insert(suffix.into(),
+            Arc::new(ResolveHostWrapper::new(resolver)));
+        self
+    }
+
     /// Adds a host resolver used whenever no suffix matches
     pub fn add_fallthrough_host_resolver<R>(&mut self, resolver: R)
         -> &mut Self
@@ -56,6 +73,19 @@ impl Config {
     {
         self.host_resolver = Some(Arc::new(
             ResolveHostWrapper::new(resolver)));
+        self
+    }
+
+    /// Adds a resolver used for a specific suffix
+    ///
+    /// Suffix should be specified without dot `.` at the start.
+    pub fn add_suffix<S, R>(&mut self, suffix: S, resolver: R)
+        -> &mut Self
+        where S: Into<String>,
+              R: Resolve + Debug + 'static
+    {
+        self.suffixes.insert(suffix.into(),
+            Arc::new(ResolveWrapper::new(resolver)));
         self
     }
 

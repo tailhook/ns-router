@@ -15,11 +15,28 @@ use ns_router::{Config, Router};
 #[derive(Debug)]
 struct Mock;
 
+#[derive(Debug)]
+struct Mock2;
+
 
 impl ResolveHost for Mock {
     type FutureHost = FutureResult<Vec<IpAddr>, Error>;
     fn resolve_host(&self, _name: &Name) -> Self::FutureHost {
         ok(vec!["127.0.0.1".parse().unwrap()])
+    }
+}
+
+impl ResolveHost for Mock2 {
+    type FutureHost = FutureResult<Vec<IpAddr>, Error>;
+    fn resolve_host(&self, _name: &Name) -> Self::FutureHost {
+        ok(vec!["127.0.0.2".parse().unwrap()])
+    }
+}
+
+impl Resolve for Mock2 {
+    type Future = FutureResult<Address, Error>;
+    fn resolve(&self, _name: &Name) -> Self::Future {
+        ok(["127.0.0.2:443".parse().unwrap()][..].into())
     }
 }
 
@@ -65,6 +82,58 @@ fn test_fallback_service() {
 
     let res = core.run(lazy(|| {
         router.resolve(&"_tcp._xmpp-server.localhost".parse().unwrap())
+    })).unwrap();
+    assert_eq!(res,
+        ["127.0.0.1:443".parse::<SocketAddr>().unwrap()][..].into());
+}
+
+#[test]
+fn test_host_suffix() {
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let handle = core.handle();
+
+    let cfg = Config::new()
+        .add_host_suffix("consul", Mock2)
+        .add_fallthrough_host_resolver(Mock)
+        .done();
+    let router = Router::from_config(&cfg, &handle);
+
+    // Read first config from a stream
+    core.turn(Some(Duration::new(0, 0)));
+
+    let res = core.run(lazy(|| {
+        router.resolve_host(&"x.consul".parse().unwrap())
+    })).unwrap();
+    assert_eq!(res, vec!["127.0.0.2".parse::<IpAddr>().unwrap()]);
+
+    let res = core.run(lazy(|| {
+        router.resolve_host(&"localhost".parse().unwrap())
+    })).unwrap();
+    assert_eq!(res, vec!["127.0.0.1".parse::<IpAddr>().unwrap()]);
+}
+
+#[test]
+fn test_suffix() {
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let handle = core.handle();
+
+    let cfg = Config::new()
+        .add_suffix("consul", Mock2)
+        .add_fallthrough_resolver(Mock)
+        .done();
+    let router = Router::from_config(&cfg, &handle);
+
+    // Read first config from a stream
+    core.turn(Some(Duration::new(0, 0)));
+
+    let res = core.run(lazy(|| {
+        router.resolve(&"x.consul".parse().unwrap())
+    })).unwrap();
+    assert_eq!(res,
+        ["127.0.0.2:443".parse::<SocketAddr>().unwrap()][..].into());
+
+    let res = core.run(lazy(|| {
+        router.resolve(&"localhost".parse().unwrap())
     })).unwrap();
     assert_eq!(res,
         ["127.0.0.1:443".parse::<SocketAddr>().unwrap()][..].into());
