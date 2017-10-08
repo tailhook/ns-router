@@ -50,6 +50,7 @@ impl<S> ResolverFuture<S> {
         }
     }
 }
+
 impl<S> ResolverFuture<S> {
     fn resolve_host(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
@@ -60,14 +61,22 @@ impl<S> ResolverFuture<S> {
             reply(&name, tx, value.clone());
             return;
         }
-        if let Some(ref res) = cfg.host_suffixes.get(name.as_ref()) {
-            res.resolve_host(cfg, name, tx);
-            return;
+        if let Some(ref suf) = cfg.suffixes.get(name.as_ref()) {
+            if let Some(ref res) = suf.host_resolver {
+                res.resolve_host(cfg, name, tx);
+            } else {
+                fail(&name, tx, Error::NameNotFound);
+            }
+            return
         }
         for (idx, _) in name.as_ref().match_indices('.') {
-            let opt_res = cfg.host_suffixes.get(&name.as_ref()[idx+1..]);
-            if let Some(ref res) = opt_res {
-                res.resolve_host(cfg, name.clone(), tx);
+            if let Some(suf) = cfg.suffixes.get(&name.as_ref()[idx+1..]) {
+                if let Some(ref res) = suf.host_resolver {
+                    res.resolve_host(cfg, name.clone(), tx);
+                } else {
+                    fail(&name, tx, Error::NameNotFound);
+
+                }
                 return
             }
         }
@@ -86,13 +95,22 @@ impl<S> ResolverFuture<S> {
             reply(&name, tx, value.clone());
             return;
         }
-        if let Some(ref res) = cfg.suffixes.get(name.as_ref()) {
-            res.resolve(cfg, name, tx);
-            return;
+        if let Some(ref suf) = cfg.suffixes.get(name.as_ref()) {
+            if let Some(ref res) = suf.resolver {
+                res.resolve(cfg, name, tx);
+            } else {
+                fail(&name, tx, Error::NameNotFound);
+            }
+            return
         }
         for (idx, _) in name.as_ref().match_indices('.') {
-            if let Some(ref res) = cfg.suffixes.get(&name.as_ref()[idx+1..]) {
-                res.resolve(cfg, name.clone(), tx);
+            if let Some(suf) = cfg.suffixes.get(&name.as_ref()[idx+1..]) {
+                if let Some(ref res) = suf.resolver {
+                    res.resolve(cfg, name.clone(), tx);
+                } else {
+                    fail(&name, tx, Error::NameNotFound);
+
+                }
                 return
             }
         }

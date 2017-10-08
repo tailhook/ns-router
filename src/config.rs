@@ -17,10 +17,20 @@ use internal_traits::{ResolveHostWrapper, ResolveWrapper};
 pub struct Config {
     pub(crate) hosts: HashMap<Name, Vec<IpAddr>>,
     pub(crate) services: HashMap<Name, Address>,
-    pub(crate) host_suffixes: HashMap<String, Arc<HostResolver>>,
-    pub(crate) suffixes: HashMap<String, Arc<Resolver>>,
+
+    pub(crate) suffixes: HashMap<String, Suffix>,
+
     pub(crate) host_resolver: Option<Arc<HostResolver>>,
     pub(crate) resolver: Option<Arc<Resolver>>,
+}
+
+/// Represents configuration of resolvers for a suffix
+#[derive(Clone, Debug)]
+pub struct Suffix {
+    pub(crate) host_resolver: Option<Arc<HostResolver>>,
+    pub(crate) resolver: Option<Arc<Resolver>>,
+    pub(crate) host_subscriber: Option<Arc<HostSubscriber>>,
+    pub(crate) subscriber: Option<Arc<Subscriber>>,
 }
 
 impl Config {
@@ -32,7 +42,6 @@ impl Config {
             services: HashMap::new(),
             host_resolver: None,
             resolver: None,
-            host_suffixes: HashMap::new(),
             suffixes: HashMap::new(),
         }
     }
@@ -53,21 +62,39 @@ impl Config {
         self
     }
 
-    /// Adds a host resolver used for a specific suffix
+    /// Adds or returns configured suffix
     ///
-    /// Suffix should be specified without dot `.` at the start.
-    pub fn add_host_suffix<S, R>(&mut self, suffix: S, resolver: R)
-        -> &mut Self
+    /// Then you can add suffix-specific resolvers and host-resolvers.
+    ///
+    /// Note: `add_host` and `add_service` override addresses for specific
+    /// hostnames even inside the configured suffix.
+    ///
+    /// Note: adding a suffix immediately disables fallthrough of the names
+    /// matching the suffix to a fallback resolvers. Even if no
+    /// resolvers/subscribers are added to the suffix. Use `remove_suffix` or
+    /// duplicate fallthrough resolvers here if needed.
+    pub fn suffix<S>(&mut self, suffix: S)
+        -> &mut Suffix
         where S: Into<String>,
-              R: ResolveHost + Debug + 'static
     {
-        self.host_suffixes.insert(suffix.into(),
-            Arc::new(ResolveHostWrapper::new(resolver)));
+        self.suffixes.entry(suffix.into()).or_insert_with(|| Suffix {
+            host_resolver: None,
+            resolver: None,
+            host_subscriber: None,
+            subscriber: None,
+        })
+    }
+
+    /// Removes already configured suffix
+    pub fn remove_suffix<S>(&mut self, suffix: &str)
+        -> &mut Self
+    {
+        self.suffixes.remove(suffix);
         self
     }
 
     /// Adds a host resolver used whenever no suffix matches
-    pub fn add_fallthrough_host_resolver<R>(&mut self, resolver: R)
+    pub fn set_fallthrough_host_resolver<R>(&mut self, resolver: R)
         -> &mut Self
         where R: ResolveHost + Debug + 'static
     {
@@ -76,21 +103,8 @@ impl Config {
         self
     }
 
-    /// Adds a resolver used for a specific suffix
-    ///
-    /// Suffix should be specified without dot `.` at the start.
-    pub fn add_suffix<S, R>(&mut self, suffix: S, resolver: R)
-        -> &mut Self
-        where S: Into<String>,
-              R: Resolve + Debug + 'static
-    {
-        self.suffixes.insert(suffix.into(),
-            Arc::new(ResolveWrapper::new(resolver)));
-        self
-    }
-
     /// Adds a resolver used whenever no suffix matches
-    pub fn add_fallthrough_resolver<R>(&mut self, resolver: R)
+    pub fn set_fallthrough_resolver<R>(&mut self, resolver: R)
         -> &mut Self
         where R: Resolve + Debug + 'static
     {
@@ -105,3 +119,24 @@ impl Config {
     }
 }
 
+impl Suffix {
+    /// Sets a host resolver for this suffix
+    pub fn set_host_resolver<R>(&mut self, resolver: R)
+        -> &mut Self
+        where R: ResolveHost + Debug + 'static
+    {
+        self.host_resolver = Some(Arc::new(
+            ResolveHostWrapper::new(resolver)));
+        self
+    }
+
+    /// Sets a resolver for this suffix
+    pub fn set_resolver<R>(&mut self, resolver: R)
+        -> &mut Self
+        where R: Resolve + Debug + 'static
+    {
+        self.resolver = Some(Arc::new(
+            ResolveWrapper::new(resolver)));
+        self
+    }
+}
