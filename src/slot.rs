@@ -107,7 +107,7 @@ impl<T> Sender<T> {
     ///
     /// If you're calling this function from a context that does not have a
     /// task, then you can use the `is_canceled` API instead.
-    pub fn poll_cancel(&mut self) -> Poll<(), ()> {
+    pub fn poll_cancel(&self) -> Poll<(), ()> {
         if let Some(ref lock) = self.inner.upgrade() {
             let mut inner = lock.lock().unwrap();
             inner.cancel_task = Some(task::current());
@@ -115,6 +115,23 @@ impl<T> Sender<T> {
         } else {
             Ok(Async::Ready(()))
         }
+    }
+
+    /// Tests to see whether this `Sender`'s corresponding `Receiver`
+    /// has gone away.
+    ///
+    /// This function can be used to learn about when the `Receiver` (consumer)
+    /// half has gone away and nothing will be able to receive a message sent
+    /// from `send`.
+    ///
+    /// Note that this function is intended to *not* be used in the context of a
+    /// future. If you're implementing a future you probably want to call the
+    /// `poll_cancel` function which will block the current task if the
+    /// cancellation hasn't happened yet. This can be useful when working on a
+    /// non-futures related thread, though, which would otherwise panic if
+    /// `poll_cancel` were called.
+    pub fn is_canceled(&self) -> bool {
+        self.inner.upgrade().is_none()
     }
 }
 
@@ -192,6 +209,7 @@ impl<T> SendError<T> {
 /// first value sent (and erroring on sender side) it replaces value if
 /// consumer is not fast enough and preserves last values sent on any
 /// poll of a stream.
+///
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let inner = Arc::new(Mutex::new(Inner {
         value: None,
