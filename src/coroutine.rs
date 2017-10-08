@@ -1,7 +1,10 @@
 use std::sync::{Arc, Weak};
 use std::net::IpAddr;
+use std::mem;
 
 use abstract_ns::{Address, Name, Error};
+use futures::future::Shared;
+use futures::stream::FuturesUnordered;
 use futures::sync::mpsc::{UnboundedReceiver};
 use futures::sync::oneshot;
 use futures::{Stream, Future, Async};
@@ -15,9 +18,19 @@ use slot;
 
 pub struct ResolverFuture<S> {
     config: S,
+    update_tx: oneshot::Sender<()>,
+    update_rx: Shared<oneshot::Receiver<()>>,
     requests: UnboundedReceiver<Request>,
+    subscriptions: FuturesUnordered<SubscrTask>,
     table: Weak<Table>,
     handle: Handle,
+}
+
+struct SubscrTask {
+    update_rx: Shared<oneshot::Receiver<()>>,
+}
+
+enum SubscrState {
 }
 
 impl<S> ResolverFuture<S> {
@@ -26,8 +39,12 @@ impl<S> ResolverFuture<S> {
         -> ResolverFuture<S>
         where S: Stream<Item=Arc<Config>, Error=Void>
     {
+        let (tx, rx) = oneshot::channel();
         ResolverFuture {
             config, requests,
+            update_tx: tx,
+            update_rx: rx.shared(),
+            subscriptions: FuturesUnordered::new(),
             table: Arc::downgrade(table),
             handle: handle.clone(),
         }
@@ -109,7 +126,13 @@ impl<S> Future for ResolverFuture<S>
             None => return Ok(Async::Ready(())),
         };
         match self.config.poll() {
-            Ok(Async::Ready(Some(c))) => table.cfg.put(&c),
+            Ok(Async::Ready(Some(c))) => {
+                table.cfg.put(&c);
+                let (tx, rx) = oneshot::channel();
+                let tx = mem::replace(&mut self.update_tx, tx);
+                self.update_rx = rx.shared();
+                tx.send(()).ok();
+            },
             Ok(Async::Ready(None)) => return Ok(Async::Ready(())),
             Ok(Async::NotReady) => {},
             Err(e) => unreachable(e),
@@ -142,5 +165,13 @@ impl<S> Future for ResolverFuture<S>
             }
         }
         Ok(Async::NotReady)
+    }
+}
+
+impl Future for SubscrTask {
+    type Item = SubscrState;
+    type Error = Void;
+    fn poll(&mut self) -> Result<Async<SubscrState>, Void> {
+        unimplemented!();
     }
 }
