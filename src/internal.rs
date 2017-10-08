@@ -94,11 +94,15 @@ impl Table {
     pub fn subscribe_host(&self, name: &Name,
         tx: slot::Sender<Vec<IpAddr>>)
     {
-        unimplemented!();
+        self.requests.unbounded_send(
+            Request::HostSubscribe(name.clone(), tx)).ok();
+        // TODO(tailhook) log a warning on error?
     }
 
     pub fn subscribe(&self, name: &Name, tx: slot::Sender<Address>) {
-        unimplemented!();
+        self.requests.unbounded_send(
+            Request::Subscribe(name.clone(), tx)).ok();
+        // TODO(tailhook) log a warning on error?
     }
 }
 
