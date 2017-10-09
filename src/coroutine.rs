@@ -25,10 +25,6 @@ pub struct ResolverFuture {
     handle: Handle,
 }
 
-struct SubscrTask {
-    update_rx: Shared<oneshot::Receiver<()>>,
-}
-
 pub(crate) enum FutureResult {
   Done,
   Stop,

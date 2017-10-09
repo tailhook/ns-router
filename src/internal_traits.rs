@@ -8,12 +8,12 @@ use abstract_ns::{ResolveHost, Resolve, HostSubscribe, Subscribe};
 use futures::{Future, Async};
 use futures::sync::oneshot;
 use futures::stream::FuturesUnordered;
-use internal::{Table, reply, fail};
-use coroutine::{ResolverFuture, FutureResult};
+use void::Void;
 
 use config::Config;
+use coroutine::{ResolverFuture, FutureResult};
+use internal::{Table, reply, fail};
 use slot;
-use void::Void;
 
 
 pub trait HostResolver: Debug + 'static {

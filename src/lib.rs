@@ -17,6 +17,7 @@ mod internal;
 mod internal_traits;
 mod router;
 mod slot;  // TODO(tailhook) it should be added to futures-rs
+mod subscr;
 
 pub use router::Router;
 pub use config::Config;
