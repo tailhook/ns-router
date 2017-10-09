@@ -107,7 +107,7 @@ impl<T> Sender<T> {
     ///
     /// If you're calling this function from a context that does not have a
     /// task, then you can use the `is_canceled` API instead.
-    pub fn poll_cancel(&self) -> Poll<(), ()> {
+    pub fn poll_cancel(&mut self) -> Poll<(), ()> {
         if let Some(ref lock) = self.inner.upgrade() {
             let mut inner = lock.lock().unwrap();
             inner.cancel_task = Some(task::current());
