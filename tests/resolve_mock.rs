@@ -6,7 +6,7 @@ extern crate tokio_core;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
-use futures::{Future, lazy};
+use futures::{lazy};
 use futures::future::{FutureResult, ok};
 use abstract_ns::{ResolveHost, Resolve, Name, Address, Error};
 use ns_router::{Config, Router};

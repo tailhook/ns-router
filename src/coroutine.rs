@@ -16,12 +16,11 @@ use internal::{Table, Request, reply, fail};
 use slot;
 
 
-pub struct ResolverFuture<S> {
-    config: S,
+pub struct ResolverFuture {
     update_tx: oneshot::Sender<()>,
     update_rx: Shared<oneshot::Receiver<()>>,
     requests: UnboundedReceiver<Request>,
-    subscriptions: FuturesUnordered<SubscrTask>,
+    futures: FuturesUnordered<Box<Future<Item=FutureResult, Error=Void>>>,
     table: Weak<Table>,
     handle: Handle,
 }
@@ -30,28 +29,60 @@ struct SubscrTask {
     update_rx: Shared<oneshot::Receiver<()>>,
 }
 
-enum SubscrState {
+pub(crate) enum FutureResult {
+  Done,
+  Stop,
+  UpdateConfig {
+      cfg: Arc<Config>,
+      next: Box<Future<Item=FutureResult, Error=Void>>,
+  },
+  ResubscribeHost { name: Name, tx: slot::Sender<Vec<IpAddr>> },
+  Resubscribe { name: Name, tx: slot::Sender<Address> },
 }
 
-impl<S> ResolverFuture<S> {
-    pub fn new(config: S, requests: UnboundedReceiver<Request>,
+fn mapper<S>(res: Result<(Option<Arc<Config>>, S), (Void, S)>)
+    -> Result<FutureResult, Void>
+    where S: Stream<Item=Arc<Config>, Error=Void> + 'static
+{
+    match res {
+        Ok((None, _)) => Ok(FutureResult::Stop),
+        Ok((Some(cfg), stream)) => Ok(FutureResult::UpdateConfig {
+            cfg,
+            next: Box::new(stream.into_future().then(mapper)),
+        }),
+        Err((e, _)) => unreachable(e),
+    }
+}
+
+impl ResolverFuture {
+    pub fn new<S>(config: S, requests: UnboundedReceiver<Request>,
         table: &Arc<Table>, handle: &Handle)
-        -> ResolverFuture<S>
-        where S: Stream<Item=Arc<Config>, Error=Void>
+        -> ResolverFuture
+        where S: Stream<Item=Arc<Config>, Error=Void> + 'static
     {
         let (tx, rx) = oneshot::channel();
+        let mut futures = FuturesUnordered::new();
+        futures.push(
+            Box::new(config.into_future().then(mapper))
+            as Box<Future<Item=FutureResult, Error=Void>>);
         ResolverFuture {
-            config, requests,
+            requests,
             update_tx: tx,
             update_rx: rx.shared(),
-            subscriptions: FuturesUnordered::new(),
+            futures: futures,
             table: Arc::downgrade(table),
             handle: handle.clone(),
         }
     }
 }
 
-impl<S> ResolverFuture<S> {
+impl ResolverFuture {
+    pub(crate) fn spawn<F>(&mut self, future: F)
+        where F: Future<Item=FutureResult, Error=Void> + 'static,
+    {
+        self.futures.push(Box::new(future)
+            as Box<Future<Item=FutureResult, Error=Void>>)
+    }
     fn resolve_host(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
     {
@@ -63,7 +94,7 @@ impl<S> ResolverFuture<S> {
         }
         if let Some(ref suf) = cfg.suffixes.get(name.as_ref()) {
             if let Some(ref res) = suf.host_resolver {
-                res.resolve_host(cfg, name, tx);
+                res.resolve_host(self, cfg, name, tx);
             } else {
                 fail(&name, tx, Error::NameNotFound);
             }
@@ -72,7 +103,7 @@ impl<S> ResolverFuture<S> {
         for (idx, _) in name.as_ref().match_indices('.') {
             if let Some(suf) = cfg.suffixes.get(&name.as_ref()[idx+1..]) {
                 if let Some(ref res) = suf.host_resolver {
-                    res.resolve_host(cfg, name.clone(), tx);
+                    res.resolve_host(self, cfg, name.clone(), tx);
                 } else {
                     fail(&name, tx, Error::NameNotFound);
 
@@ -81,7 +112,7 @@ impl<S> ResolverFuture<S> {
             }
         }
         if let Some(ref res) = cfg.host_resolver {
-            res.resolve_host(cfg, name, tx);
+            res.resolve_host(self, cfg, name, tx);
         } else {
             fail(&name, tx, Error::NameNotFound);
         }
@@ -97,7 +128,7 @@ impl<S> ResolverFuture<S> {
         }
         if let Some(ref suf) = cfg.suffixes.get(name.as_ref()) {
             if let Some(ref res) = suf.resolver {
-                res.resolve(cfg, name, tx);
+                res.resolve(self, cfg, name, tx);
             } else {
                 fail(&name, tx, Error::NameNotFound);
             }
@@ -106,7 +137,7 @@ impl<S> ResolverFuture<S> {
         for (idx, _) in name.as_ref().match_indices('.') {
             if let Some(suf) = cfg.suffixes.get(&name.as_ref()[idx+1..]) {
                 if let Some(ref res) = suf.resolver {
-                    res.resolve(cfg, name.clone(), tx);
+                    res.resolve(self, cfg, name.clone(), tx);
                 } else {
                     fail(&name, tx, Error::NameNotFound);
 
@@ -115,7 +146,7 @@ impl<S> ResolverFuture<S> {
             }
         }
         if let Some(ref res) = cfg.resolver {
-            res.resolve(cfg, name, tx);
+            res.resolve(self, cfg, name, tx);
         } else {
             fail(&name, tx, Error::NameNotFound);
         }
@@ -132,9 +163,7 @@ impl<S> ResolverFuture<S> {
     }
 }
 
-impl<S> Future for ResolverFuture<S>
-    where S: Stream<Item=Arc<Config>, Error=Void>
-{
+impl Future for ResolverFuture {
     type Item = ();
     type Error = ();
     fn poll(&mut self) -> Result<Async<()>, ()> {
@@ -143,18 +172,6 @@ impl<S> Future for ResolverFuture<S>
             Some(x) => x,
             None => return Ok(Async::Ready(())),
         };
-        match self.config.poll() {
-            Ok(Async::Ready(Some(c))) => {
-                table.cfg.put(&c);
-                let (tx, rx) = oneshot::channel();
-                let tx = mem::replace(&mut self.update_tx, tx);
-                self.update_rx = rx.shared();
-                tx.send(()).ok();
-            },
-            Ok(Async::Ready(None)) => return Ok(Async::Ready(())),
-            Ok(Async::NotReady) => {},
-            Err(e) => unreachable(e),
-        }
         if let Some(cfg) = table.cfg.get() {
             loop {
                 let inp = self.requests.poll()
@@ -181,15 +198,48 @@ impl<S> Future for ResolverFuture<S>
                     }
                 }
             }
+            while let Ok(Async::Ready(Some(state))) = self.futures.poll() {
+                use self::FutureResult::*;
+                match state {
+                    Done => {}
+                    Stop => return Ok(Async::Ready(())),
+                    UpdateConfig { cfg, next } => {
+                        table.cfg.put(&cfg);
+                        let (tx, rx) = oneshot::channel();
+                        let tx = mem::replace(&mut self.update_tx, tx);
+                        self.update_rx = rx.shared();
+                        tx.send(()).ok();
+                        self.futures.push(next);
+                    }
+                    ResubscribeHost { name, tx } => {
+                        self.host_subscribe(&table, &cfg, name, tx)
+                    }
+                    Resubscribe { name, tx } => {
+                        self.subscribe(&table, &cfg, name, tx)
+                    }
+                }
+            }
+        } else {
+            while let Ok(Async::Ready(Some(state))) = self.futures.poll() {
+                use self::FutureResult::*;
+                match state {
+                    Done => {}
+                    Stop => return Ok(Async::Ready(())),
+                    UpdateConfig { cfg, next } => {
+                        table.cfg.put(&cfg);
+                        let (tx, rx) = oneshot::channel();
+                        let tx = mem::replace(&mut self.update_tx, tx);
+                        self.update_rx = rx.shared();
+                        tx.send(()).ok();
+                        self.futures.push(next);
+                        // we have a config, so we will not recurse more
+                        return self.poll()
+                    }
+                    ResubscribeHost { .. } => unreachable!(),
+                    Resubscribe { .. } => unreachable!(),
+                }
+            }
         }
         Ok(Async::NotReady)
-    }
-}
-
-impl Future for SubscrTask {
-    type Item = SubscrState;
-    type Error = Void;
-    fn poll(&mut self) -> Result<Async<SubscrState>, Void> {
-        unimplemented!();
     }
 }
