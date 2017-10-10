@@ -15,7 +15,6 @@ use config::{Config, Suffix};
 use internal::{Table, Request, reply, fail};
 use slot;
 use subscr::{SubscrFuture, HostNoOpSubscr, NoOpSubscr};
-use subscr::{HostSubscr, Subscr};
 
 
 pub struct ResolverFuture {
@@ -224,7 +223,7 @@ impl Future for ResolverFuture {
                     Restart { mut task } => {
                         task.restart(self, &cfg);
                     }
-                    DelayRestart { mut task } => {
+                    DelayRestart { task } => {
                         self.futures.push(Box::new(
                             Timeout::new(cfg.restart_delay, &self.handle)
                             .expect("can always set timeout")

@@ -1,6 +1,5 @@
 use std::net::IpAddr;
 use std::sync::Arc;
-use std::time::Duration;
 
 use abstract_ns::{Name, Address, Error};
 use futures::{Future, Stream, Async};

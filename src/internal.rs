@@ -5,7 +5,7 @@ use std::net::IpAddr;
 use abstract_ns::{Name, Error, Address};
 use futures::Stream;
 use futures::sync::oneshot;
-use futures::sync::mpsc::{UnboundedSender, unbounded, SendError};
+use futures::sync::mpsc::{UnboundedSender, unbounded};
 use tokio_core::reactor::Handle;
 
 use cell::ConfigCell;
