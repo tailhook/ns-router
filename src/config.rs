@@ -20,11 +20,7 @@ pub struct Config {
     pub(crate) services: HashMap<Name, Address>,
 
     pub(crate) suffixes: HashMap<String, Suffix>,
-
-    pub(crate) host_resolver: Option<Arc<HostResolver>>,
-    pub(crate) resolver: Option<Arc<Resolver>>,
-    pub(crate) host_subscriber: Option<Arc<HostSubscriber>>,
-    pub(crate) subscriber: Option<Arc<Subscriber>>,
+    pub(crate) root: Suffix,
 }
 
 /// Represents configuration of resolvers for a suffix
@@ -44,10 +40,12 @@ impl Config {
             hosts: HashMap::new(),
             services: HashMap::new(),
             suffixes: HashMap::new(),
-            host_resolver: None,
-            resolver: None,
-            host_subscriber: None,
-            subscriber: None,
+            root: Suffix {
+                host_resolver: None,
+                resolver: None,
+                host_subscriber: None,
+                subscriber: None,
+            },
         }
     }
 
@@ -103,7 +101,7 @@ impl Config {
         -> &mut Self
         where R: ResolveHost + Debug + 'static
     {
-        self.host_resolver = Some(Arc::new(
+        self.root.host_resolver = Some(Arc::new(
             ResolveHostWrapper::new(resolver)));
         self
     }
@@ -113,7 +111,7 @@ impl Config {
         -> &mut Self
         where R: Resolve + Debug + 'static
     {
-        self.resolver = Some(Arc::new(
+        self.root.resolver = Some(Arc::new(
             ResolveWrapper::new(resolver)));
         self
     }
@@ -123,7 +121,7 @@ impl Config {
         -> &mut Self
         where S: HostSubscribe + Debug + 'static
     {
-        self.host_subscriber = Some(Arc::new(
+        self.root.host_subscriber = Some(Arc::new(
             HostSubscribeWrapper::new(subscriber)));
         self
     }
@@ -133,7 +131,7 @@ impl Config {
         -> &mut Self
         where S: Subscribe + Debug + 'static
     {
-        self.subscriber = Some(Arc::new(
+        self.root.subscriber = Some(Arc::new(
             SubscribeWrapper::new(subscriber)));
         self
     }

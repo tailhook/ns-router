@@ -11,7 +11,7 @@ use futures::{Stream, Future, Async};
 use tokio_core::reactor::Handle;
 use void::{Void, unreachable};
 
-use config::Config;
+use config::{Config, Suffix};
 use internal::{Table, Request, reply, fail};
 use slot;
 use subscr::{SubscrFuture, HostMemSubscr, MemSubscr};
@@ -73,6 +73,18 @@ impl ResolverFuture {
     }
 }
 
+fn get_suffix<'x>(cfg: &'x Arc<Config>, name: &str) -> &'x Suffix {
+    if let Some(ref suf) = cfg.suffixes.get(name) {
+        return suf;
+    }
+    for (idx, _) in name.match_indices('.') {
+        if let Some(suf) = cfg.suffixes.get(&name[idx+1..]) {
+            return suf;
+        }
+    }
+    return &cfg.root;
+}
+
 impl ResolverFuture {
     pub(crate) fn spawn<F>(&mut self, future: F)
         where F: Future<Item=FutureResult, Error=Void> + 'static,
@@ -89,26 +101,7 @@ impl ResolverFuture {
             reply(&name, tx, value.clone());
             return;
         }
-        if let Some(ref suf) = cfg.suffixes.get(name.as_ref()) {
-            if let Some(ref res) = suf.host_resolver {
-                res.resolve_host(self, cfg, name, tx);
-            } else {
-                fail(&name, tx, Error::NameNotFound);
-            }
-            return
-        }
-        for (idx, _) in name.as_ref().match_indices('.') {
-            if let Some(suf) = cfg.suffixes.get(&name.as_ref()[idx+1..]) {
-                if let Some(ref res) = suf.host_resolver {
-                    res.resolve_host(self, cfg, name.clone(), tx);
-                } else {
-                    fail(&name, tx, Error::NameNotFound);
-
-                }
-                return
-            }
-        }
-        if let Some(ref res) = cfg.host_resolver {
+        if let Some(ref res) = get_suffix(cfg, name.as_ref()).host_resolver {
             res.resolve_host(self, cfg, name, tx);
         } else {
             fail(&name, tx, Error::NameNotFound);
@@ -123,26 +116,7 @@ impl ResolverFuture {
             reply(&name, tx, value.clone());
             return;
         }
-        if let Some(ref suf) = cfg.suffixes.get(name.as_ref()) {
-            if let Some(ref res) = suf.resolver {
-                res.resolve(self, cfg, name, tx);
-            } else {
-                fail(&name, tx, Error::NameNotFound);
-            }
-            return
-        }
-        for (idx, _) in name.as_ref().match_indices('.') {
-            if let Some(suf) = cfg.suffixes.get(&name.as_ref()[idx+1..]) {
-                if let Some(ref res) = suf.resolver {
-                    res.resolve(self, cfg, name.clone(), tx);
-                } else {
-                    fail(&name, tx, Error::NameNotFound);
-
-                }
-                return
-            }
-        }
-        if let Some(ref res) = cfg.resolver {
+        if let Some(ref res) = get_suffix(cfg, name.as_ref()).resolver {
             res.resolve(self, cfg, name, tx);
         } else {
             fail(&name, tx, Error::NameNotFound);
