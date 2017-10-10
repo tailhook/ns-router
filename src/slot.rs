@@ -1,4 +1,5 @@
 //! An unbounded channel that only stores last value sent
+#![allow(dead_code)]
 
 use std::mem;
 use std::sync::{Arc, Weak, Mutex};
