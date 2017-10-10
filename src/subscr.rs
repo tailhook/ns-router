@@ -1,18 +1,22 @@
+use std::net::IpAddr;
+
+use abstract_ns::Name;
 use futures::{Future, Async};
 use futures::sync::oneshot;
 use futures::future::Shared;
 use void::Void;
 
+use slot;
 use coroutine::FutureResult;
 
 
 pub(crate) struct SubscrFuture<F: Task> {
-    update_rx: Shared<oneshot::Receiver<()>>,
-    task: F,
+    pub update_rx: Shared<oneshot::Receiver<()>>,
+    pub task: Option<F>,
 }
 
 pub(crate) trait Task {
-    fn state(&mut self) -> FutureResult;
+    fn state(self) -> FutureResult;
     fn poll(&mut self);
 }
 
@@ -22,23 +26,30 @@ struct Subscr {
 struct HostSubscr {
 }
 
+pub(crate) struct HostMemSubscr {
+    pub name: Name,
+    pub tx: slot::Sender<Vec<IpAddr>>,
+}
+
 impl<F: Task> Future for SubscrFuture<F> {
     type Item = FutureResult;
     type Error = Void;
     fn poll(&mut self) -> Result<Async<FutureResult>, Void> {
         match self.update_rx.poll() {
             Ok(Async::Ready(_)) | Err(_) => {
-                return Ok(Async::Ready(self.task.state()));
+                return Ok(Async::Ready(self.task
+                    .take().expect("future polled twice")
+                    .state()));
             }
             Ok(Async::NotReady) => {},
         }
-        self.task.poll();
+        self.task.as_mut().expect("future polled twice").poll();
         Ok(Async::NotReady)
     }
 }
 
 impl Task for Subscr {
-    fn state(&mut self) -> FutureResult {
+    fn state(self) -> FutureResult {
         unimplemented!();
     }
     fn poll(&mut self) {
@@ -47,10 +58,22 @@ impl Task for Subscr {
 }
 
 impl Task for HostSubscr {
-    fn state(&mut self) -> FutureResult {
+    fn state(self) -> FutureResult {
         unimplemented!();
     }
     fn poll(&mut self) {
         unimplemented!();
+    }
+}
+
+impl Task for HostMemSubscr {
+    fn state(self) -> FutureResult {
+        FutureResult::ResubscribeHost {
+            name: self.name,
+            tx: self.tx,
+        }
+    }
+    fn poll(&mut self) {
+        // do nothing until config changes
     }
 }

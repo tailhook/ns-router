@@ -7,9 +7,9 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use futures::{lazy};
-use futures::future::{Future, Empty, FutureResult, IntoStream, ok, empty};
+use futures::future::{Future, Empty, IntoStream, empty};
 use futures::stream::{once, Stream, Chain, Once};
-use abstract_ns::{HostSubscribe, Resolve, Name, Address, Error};
+use abstract_ns::{HostSubscribe, Subscribe, Name, Address, Error};
 use ns_router::{Config, Router};
 
 
@@ -30,6 +30,34 @@ impl HostSubscribe for Mock {
 
 
 #[test]
+fn test_overridden_host() {
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let handle = core.handle();
+
+    let mut cfg = Config::new();
+    cfg.add_host(&"localhost".parse().unwrap(),
+            vec!["127.0.0.1".parse::<IpAddr>().unwrap()]);
+    let (router, up) = Router::updating_config(&cfg.done(), &handle);
+
+    let res = core.run(lazy(|| {
+        router.subscribe_host(&"localhost".parse().unwrap()).into_future()
+    })).unwrap();
+    assert_eq!(res.0, Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()]));
+
+    cfg.add_host(&"localhost".parse().unwrap(),
+            vec!["127.0.0.2".parse::<IpAddr>().unwrap()]);
+    up.update(&cfg.done());
+
+    let res = core.run(res.1.into_future()).unwrap();
+    assert_eq!(res.0, Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()]));
+
+    let res = core.run(lazy(|| {
+        router.subscribe_host(&"localhost".parse().unwrap()).into_future()
+    })).unwrap();
+    assert_eq!(res.0, Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()]));
+}
+
+#[test]
 fn test_fallback_host() {
     let mut core = tokio_core::reactor::Core::new().unwrap();
     let handle = core.handle();
@@ -45,6 +73,6 @@ fn test_fallback_host() {
     let res = core.run(lazy(|| {
         router.subscribe_host(&"localhost".parse().unwrap()).into_future()
     })).unwrap();
-    assert_eq!(res.0, vec!["127.0.0.1".parse::<IpAddr>().unwrap()]);
+    assert_eq!(res.0, Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()]));
 }
 

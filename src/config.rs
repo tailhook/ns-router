@@ -118,6 +118,26 @@ impl Config {
         self
     }
 
+    /// Sets a host subscriber used whenever no suffix matches
+    pub fn set_fallthrough_host_subscriber<S>(&mut self, subscriber: S)
+        -> &mut Self
+        where S: HostSubscribe + Debug + 'static
+    {
+        self.host_subscriber = Some(Arc::new(
+            HostSubscribeWrapper::new(subscriber)));
+        self
+    }
+
+    /// Sets a subscriber used whenever no suffix matches
+    pub fn set_fallthrough_subscriber<S>(&mut self, subscriber: S)
+        -> &mut Self
+        where S: Subscribe + Debug + 'static
+    {
+        self.subscriber = Some(Arc::new(
+            SubscribeWrapper::new(subscriber)));
+        self
+    }
+
     /// A convenience method that returns Arc'd config
     pub fn done(&self) -> Arc<Config> {
         Arc::new(self.clone())

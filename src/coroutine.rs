@@ -14,6 +14,7 @@ use void::{Void, unreachable};
 use config::Config;
 use internal::{Table, Request, reply, fail};
 use slot;
+use subscr::{SubscrFuture, HostMemSubscr};
 
 
 pub struct ResolverFuture {
@@ -150,6 +151,17 @@ impl ResolverFuture {
     fn host_subscribe(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Vec<IpAddr>>)
     {
+        if let Some(value) = cfg.hosts.get(&name) {
+            let ok = tx.swap(value.clone()).is_ok();
+            if ok {
+                let update_rx = self.update_rx.clone();
+                self.spawn(SubscrFuture {
+                    update_rx,
+                    task: Some(HostMemSubscr { name, tx }),
+                });
+            }
+            return;
+        }
         unimplemented!();
     }
     fn subscribe(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
@@ -168,7 +180,7 @@ impl Future for ResolverFuture {
             Some(x) => x,
             None => return Ok(Async::Ready(())),
         };
-        if let Some(cfg) = table.cfg.get() {
+        if let Some(mut cfg) = table.cfg.get() {
             loop {
                 let inp = self.requests.poll()
                     .map_err(|_| error!("Router input stream is failed"))?;
@@ -199,8 +211,9 @@ impl Future for ResolverFuture {
                 match state {
                     Done => {}
                     Stop => return Ok(Async::Ready(())),
-                    UpdateConfig { cfg, next } => {
-                        table.cfg.put(&cfg);
+                    UpdateConfig { cfg: new_cfg, next } => {
+                        table.cfg.put(&new_cfg);
+                        cfg = new_cfg;
                         let (tx, rx) = oneshot::channel();
                         let tx = mem::replace(&mut self.update_tx, tx);
                         self.update_rx = rx.shared();
