@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use abstract_ns::Name;
+use abstract_ns::{Name, Address};
 use futures::{Future, Async};
 use futures::sync::oneshot;
 use futures::future::Shared;
@@ -29,6 +29,11 @@ struct HostSubscr {
 pub(crate) struct HostMemSubscr {
     pub name: Name,
     pub tx: slot::Sender<Vec<IpAddr>>,
+}
+
+pub(crate) struct MemSubscr {
+    pub name: Name,
+    pub tx: slot::Sender<Address>,
 }
 
 impl<F: Task> Future for SubscrFuture<F> {
@@ -69,6 +74,18 @@ impl Task for HostSubscr {
 impl Task for HostMemSubscr {
     fn state(self) -> FutureResult {
         FutureResult::ResubscribeHost {
+            name: self.name,
+            tx: self.tx,
+        }
+    }
+    fn poll(&mut self) {
+        // do nothing until config changes
+    }
+}
+
+impl Task for MemSubscr {
+    fn state(self) -> FutureResult {
+        FutureResult::Resubscribe {
             name: self.name,
             tx: self.tx,
         }

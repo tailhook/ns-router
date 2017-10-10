@@ -9,7 +9,7 @@ use std::time::Duration;
 use futures::{lazy};
 use futures::future::{Future, Empty, IntoStream, empty};
 use futures::stream::{once, Stream, Chain, Once};
-use abstract_ns::{HostSubscribe, Subscribe, Name, Address, Error};
+use abstract_ns::{HostSubscribe, Subscribe, Name, Error};
 use ns_router::{Config, Router};
 
 
@@ -55,6 +55,39 @@ fn test_overridden_host() {
         router.subscribe_host(&"localhost".parse().unwrap()).into_future()
     })).unwrap();
     assert_eq!(res.0, Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()]));
+}
+
+#[test]
+fn test_overridden_service() {
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let handle = core.handle();
+
+    let mut cfg = Config::new();
+    cfg.add_service(&"_http._tcp.localhost".parse().unwrap(),
+              ["127.0.0.1:80".parse::<SocketAddr>().unwrap()][..].into());
+    let (router, up) = Router::updating_config(&cfg.done(), &handle);
+
+    let res = core.run(lazy(|| {
+        router.subscribe(
+            &"_http._tcp.localhost".parse().unwrap()).into_future()
+    })).unwrap();
+    assert_eq!(res.0,
+        Some(["127.0.0.1:80".parse::<SocketAddr>().unwrap()][..].into()));
+
+    cfg.add_service(&"_http._tcp.localhost".parse().unwrap(),
+              ["127.0.0.2:80".parse::<SocketAddr>().unwrap()][..].into());
+    up.update(&cfg.done());
+
+    let res = core.run(res.1.into_future()).unwrap();
+    assert_eq!(res.0,
+        Some(["127.0.0.2:80".parse::<SocketAddr>().unwrap()][..].into()));
+
+    let res = core.run(lazy(|| {
+        router.subscribe(
+            &"_http._tcp.localhost".parse().unwrap()).into_future()
+    })).unwrap();
+    assert_eq!(res.0,
+        Some(["127.0.0.2:80".parse::<SocketAddr>().unwrap()][..].into()));
 }
 
 #[test]

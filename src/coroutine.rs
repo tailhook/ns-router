@@ -14,7 +14,7 @@ use void::{Void, unreachable};
 use config::Config;
 use internal::{Table, Request, reply, fail};
 use slot;
-use subscr::{SubscrFuture, HostMemSubscr};
+use subscr::{SubscrFuture, HostMemSubscr, MemSubscr};
 
 
 pub struct ResolverFuture {
@@ -167,7 +167,17 @@ impl ResolverFuture {
     fn subscribe(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Address>)
     {
-        unimplemented!();
+        if let Some(value) = cfg.services.get(&name) {
+            let ok = tx.swap(value.clone()).is_ok();
+            if ok {
+                let update_rx = self.update_rx.clone();
+                self.spawn(SubscrFuture {
+                    update_rx,
+                    task: Some(MemSubscr { name, tx }),
+                });
+            }
+            return;
+        }
     }
 }
 
