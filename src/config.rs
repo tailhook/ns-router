@@ -7,6 +7,7 @@ use abstract_ns::{Name, Address};
 use abstract_ns::{ResolveHost, Resolve, HostSubscribe, Subscribe};
 use internal_traits::{Resolver, HostResolver, Subscriber, HostSubscriber};
 use internal_traits::{ResolveHostWrapper, ResolveWrapper};
+use internal_traits::{HostSubscribeWrapper, SubscribeWrapper};
 
 
 /// Configuration of the router
@@ -22,6 +23,8 @@ pub struct Config {
 
     pub(crate) host_resolver: Option<Arc<HostResolver>>,
     pub(crate) resolver: Option<Arc<Resolver>>,
+    pub(crate) host_subscriber: Option<Arc<HostSubscriber>>,
+    pub(crate) subscriber: Option<Arc<Subscriber>>,
 }
 
 /// Represents configuration of resolvers for a suffix
@@ -40,9 +43,11 @@ impl Config {
         Config {
             hosts: HashMap::new(),
             services: HashMap::new(),
+            suffixes: HashMap::new(),
             host_resolver: None,
             resolver: None,
-            suffixes: HashMap::new(),
+            host_subscriber: None,
+            subscriber: None,
         }
     }
 
@@ -137,6 +142,26 @@ impl Suffix {
     {
         self.resolver = Some(Arc::new(
             ResolveWrapper::new(resolver)));
+        self
+    }
+
+    /// Sets a host subscriber for this suffix
+    pub fn set_host_subscriber<S>(&mut self, subscriber: S)
+        -> &mut Self
+        where S: HostSubscribe + Debug + 'static
+    {
+        self.host_subscriber = Some(Arc::new(
+            HostSubscribeWrapper::new(subscriber)));
+        self
+    }
+
+    /// Sets a subscriber for this suffix
+    pub fn set_subscriber<S>(&mut self, subscriber: S)
+        -> &mut Self
+        where S: Subscribe + Debug + 'static
+    {
+        self.subscriber = Some(Arc::new(
+            SubscribeWrapper::new(subscriber)));
         self
     }
 }

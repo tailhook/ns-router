@@ -42,6 +42,21 @@ pub struct ResolveHostWrapper<R: ResolveHost> {
     resolver: R,
 }
 
+#[derive(Debug)]
+pub struct ResolveWrapper<R: Resolve> {
+    resolver: R,
+}
+
+#[derive(Debug)]
+pub struct HostSubscribeWrapper<S: HostSubscribe> {
+    subscriber: S,
+}
+
+#[derive(Debug)]
+pub struct SubscribeWrapper<S: Subscribe> {
+    subscriber: S,
+}
+
 impl<R: ResolveHost + Debug + 'static> HostResolver for ResolveHostWrapper<R> {
     fn resolve_host(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
@@ -59,11 +74,6 @@ impl<R: ResolveHost + Debug + 'static> ResolveHostWrapper<R> {
     }
 }
 
-#[derive(Debug)]
-pub struct ResolveWrapper<R: Resolve> {
-    resolver: R,
-}
-
 impl<R: Resolve + Debug + 'static> Resolver for ResolveWrapper<R> {
     fn resolve(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Address, Error>>)
@@ -78,6 +88,42 @@ impl<R: Resolve + Debug + 'static> ResolveWrapper<R> {
         ResolveWrapper {
             resolver,
         }
+    }
+}
+
+impl<S: HostSubscribe + Debug + 'static> HostSubscribeWrapper<S> {
+    pub fn new(subscriber: S) -> HostSubscribeWrapper<S> {
+        HostSubscribeWrapper {
+            subscriber,
+        }
+    }
+}
+
+impl<S: Subscribe + Debug + 'static> SubscribeWrapper<S> {
+    pub fn new(subscriber: S) -> SubscribeWrapper<S> {
+        SubscribeWrapper {
+            subscriber,
+        }
+    }
+}
+
+impl<S> Subscriber for SubscribeWrapper<S>
+    where S: Subscribe + Debug + 'static,
+{
+    fn subscribe(&self, cfg: &Arc<Config>,
+        name: Name, tx: slot::Sender<Address>)
+    {
+        unimplemented!();
+    }
+}
+
+impl<S> HostSubscriber for HostSubscribeWrapper<S>
+    where S: HostSubscribe + Debug + 'static,
+{
+    fn host_subscribe(&self, cfg: &Arc<Config>,
+        name: Name, tx: slot::Sender<Vec<IpAddr>>)
+    {
+        unimplemented!();
     }
 }
 
