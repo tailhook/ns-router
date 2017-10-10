@@ -15,6 +15,7 @@ use config::{Config, Suffix};
 use internal::{Table, Request, reply, fail};
 use slot;
 use subscr::{SubscrFuture, HostMemSubscr, MemSubscr};
+use subscr::{HostSubscr, Subscr};
 
 
 pub struct ResolverFuture {
@@ -26,15 +27,20 @@ pub struct ResolverFuture {
     handle: Handle,
 }
 
+pub(crate) trait Continuation {
+    fn restart(&mut self, res: &mut ResolverFuture, cfg: &Arc<Config>);
+}
+
 pub(crate) enum FutureResult {
-  Done,
-  Stop,
-  UpdateConfig {
-      cfg: Arc<Config>,
-      next: Box<Future<Item=FutureResult, Error=Void>>,
-  },
-  ResubscribeHost { name: Name, tx: slot::Sender<Vec<IpAddr>> },
-  Resubscribe { name: Name, tx: slot::Sender<Address> },
+    Done,
+    Stop,
+    UpdateConfig {
+        cfg: Arc<Config>,
+        next: Box<Future<Item=FutureResult, Error=Void>>,
+    },
+    Restart {
+        task: Box<Continuation>,
+    },
 }
 
 fn mapper<S>(res: Result<(Option<Arc<Config>>, S), (Void, S)>)
@@ -71,6 +77,9 @@ impl ResolverFuture {
             handle: handle.clone(),
         }
     }
+    pub fn update_rx(&self) -> Shared<oneshot::Receiver<()>> {
+        self.update_rx.clone()
+    }
 }
 
 fn get_suffix<'x>(cfg: &'x Arc<Config>, name: &str) -> &'x Suffix {
@@ -92,7 +101,7 @@ impl ResolverFuture {
         self.futures.push(Box::new(future)
             as Box<Future<Item=FutureResult, Error=Void>>)
     }
-    fn resolve_host(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
+    fn resolve_host(&mut self, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
     {
         // need to retry resolving static host because the config might just
@@ -107,7 +116,7 @@ impl ResolverFuture {
             fail(&name, tx, Error::NameNotFound);
         }
     }
-    fn resolve(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
+    fn resolve(&mut self, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Address, Error>>)
     {
         // need to retry resolving static host because the config might just
@@ -122,7 +131,7 @@ impl ResolverFuture {
             fail(&name, tx, Error::NameNotFound);
         }
     }
-    fn host_subscribe(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
+    pub fn host_subscribe(&mut self, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Vec<IpAddr>>)
     {
         if let Some(value) = cfg.hosts.get(&name) {
@@ -136,9 +145,19 @@ impl ResolverFuture {
             }
             return;
         }
-        unimplemented!();
+        if let Some(ref sub) = get_suffix(cfg, name.as_ref()).host_subscriber {
+            sub.host_subscribe(self, sub, cfg, name, tx);
+        } else {
+            // in subscription functions we don't fail, we just wait
+            // for next opportunity (configuration reload?)
+            let update_rx = self.update_rx.clone();
+            self.spawn(SubscrFuture {
+                update_rx,
+                task: Some(HostMemSubscr { name, tx }),
+            });
+        }
     }
-    fn subscribe(&mut self, table: &Arc<Table>, cfg: &Arc<Config>,
+    pub fn subscribe(&mut self, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Address>)
     {
         if let Some(value) = cfg.services.get(&name) {
@@ -151,6 +170,17 @@ impl ResolverFuture {
                 });
             }
             return;
+        }
+        if let Some(ref res) = get_suffix(cfg, name.as_ref()).resolver {
+            unimplemented!();
+        } else {
+            // in subscription functions we don't fail, we just wait
+            // for next opportunity (configuration reload?)
+            let update_rx = self.update_rx.clone();
+            self.spawn(SubscrFuture {
+                update_rx,
+                task: Some(MemSubscr { name, tx }),
+            });
         }
     }
 }
@@ -170,16 +200,16 @@ impl Future for ResolverFuture {
                     .map_err(|_| error!("Router input stream is failed"))?;
                 match inp {
                     Async::Ready(Some(ResolveHost(n, tx))) => {
-                        self.resolve_host(&table, &cfg, n, tx);
+                        self.resolve_host(&cfg, n, tx);
                     }
                     Async::Ready(Some(Resolve(n, tx))) => {
-                        self.resolve(&table, &cfg, n, tx);
+                        self.resolve(&cfg, n, tx);
                     }
                     Async::Ready(Some(HostSubscribe(n, tx))) => {
-                        self.host_subscribe(&table, &cfg, n, tx);
+                        self.host_subscribe(&cfg, n, tx);
                     }
                     Async::Ready(Some(Subscribe(n, tx))) => {
-                        self.subscribe(&table, &cfg, n, tx);
+                        self.subscribe(&cfg, n, tx);
                     }
                     Async::Ready(None) => {
                         error!("Router input stream is done");
@@ -204,11 +234,8 @@ impl Future for ResolverFuture {
                         tx.send(()).ok();
                         self.futures.push(next);
                     }
-                    ResubscribeHost { name, tx } => {
-                        self.host_subscribe(&table, &cfg, name, tx)
-                    }
-                    Resubscribe { name, tx } => {
-                        self.subscribe(&table, &cfg, name, tx)
+                    Restart { mut task } => {
+                        task.restart(self, &cfg);
                     }
                 }
             }
@@ -228,8 +255,7 @@ impl Future for ResolverFuture {
                         // we have a config, so we will not recurse more
                         return self.poll()
                     }
-                    ResubscribeHost { .. } => unreachable!(),
-                    Resubscribe { .. } => unreachable!(),
+                    Restart { .. } => unreachable!(),
                 }
             }
         }
