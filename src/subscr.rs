@@ -10,7 +10,7 @@ use void::Void;
 use slot;
 use internal_traits::{HostSubscriber, Subscriber};
 use config::Config;
-use coroutine::{ResolverFuture, FutureResult, Continuation};
+use coroutine::{ResolverFuture, FutureResult, Continuation, get_suffix};
 
 
 pub(crate) struct SubscrFuture<F: Task> {
@@ -37,12 +37,12 @@ pub(crate) struct HostSubscr<S: Stream<Item=Vec<IpAddr>>> {
     pub tx: slot::Sender<Vec<IpAddr>>,
 }
 
-pub(crate) struct HostMemSubscr {
+pub(crate) struct HostNoOpSubscr {
     pub name: Name,
     pub tx: slot::Sender<Vec<IpAddr>>,
 }
 
-pub(crate) struct MemSubscr {
+pub(crate) struct NoOpSubscr {
     pub name: Name,
     pub tx: slot::Sender<Address>,
 }
@@ -85,11 +85,31 @@ impl<S: Stream<Item=Address>> Task for Subscr<S> {
     }
 }
 
-impl<S: Stream<Item=Vec<IpAddr>>> Task for HostSubscr<S>
+impl<S: Stream<Item=Vec<IpAddr>> + 'static> Task for HostSubscr<S>
     where S::Error: Into<Error>,
 {
     fn restart(self, res: &mut ResolverFuture, cfg: &Arc<Config>) {
-        unimplemented!();
+        if let Some(value) =  cfg.hosts.get(&self.name) {
+            let ok = self.tx.swap(value.clone()).is_ok();
+            if ok {
+                SubscrFuture::spawn_in(res,
+                    HostNoOpSubscr { name: self.name, tx: self.tx });
+            }
+            return;
+        }
+        let ref nsub = get_suffix(cfg, self.name.as_ref()).host_subscriber;
+        if let Some(ref sub) = *nsub {
+            if !Arc::ptr_eq(sub, &self.subscriber) {
+                sub.host_subscribe(res, sub, cfg, self.name, self.tx);
+            } else {
+                SubscrFuture::spawn_in(res, self)
+            }
+        } else {
+            // in subscription functions we don't fail, we just wait
+            // for next opportunity (configuration reload?)
+            SubscrFuture::spawn_in(res,
+                HostNoOpSubscr { name: self.name, tx: self.tx });
+        }
     }
     fn poll(&mut self) {
         match self.source.poll() {
@@ -120,7 +140,7 @@ impl<S: Stream<Item=Vec<IpAddr>>> Task for HostSubscr<S>
     }
 }
 
-impl Task for HostMemSubscr {
+impl Task for HostNoOpSubscr {
     fn restart(self, res: &mut ResolverFuture, cfg: &Arc<Config>) {
         // it's cheap to just resolve it again
         res.host_subscribe(cfg, self.name, self.tx);
@@ -130,7 +150,7 @@ impl Task for HostMemSubscr {
     }
 }
 
-impl Task for MemSubscr {
+impl Task for NoOpSubscr {
     fn restart(self, res: &mut ResolverFuture, cfg: &Arc<Config>) {
         // it's cheap to just resolve it again
         res.subscribe(cfg, self.name, self.tx);

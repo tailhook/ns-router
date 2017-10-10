@@ -109,3 +109,29 @@ fn test_fallback_host() {
     assert_eq!(res.0, Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()]));
 }
 
+
+#[test]
+fn test_override_after_fallback_host() {
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let handle = core.handle();
+
+    let cfg = Config::new()
+        .set_fallthrough_host_subscriber(Mock)
+        .done();
+    let (router, up) = Router::updating_config(&cfg.done(), &handle);
+
+    let res = core.run(lazy(|| {
+        router.subscribe_host(&"localhost".parse().unwrap()).into_future()
+    })).unwrap();
+    assert_eq!(res.0, Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()]));
+
+    let mut cfg = Config::new();
+    cfg.add_host(&"localhost".parse().unwrap(),
+            vec!["127.0.0.2".parse::<IpAddr>().unwrap()]);
+    up.update(&cfg.done());
+
+    let res = core.run(lazy(|| {
+        router.subscribe_host(&"localhost".parse().unwrap()).into_future()
+    })).unwrap();
+    assert_eq!(res.0, Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()]));
+}

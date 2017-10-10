@@ -14,7 +14,7 @@ use void::{Void, unreachable};
 use config::{Config, Suffix};
 use internal::{Table, Request, reply, fail};
 use slot;
-use subscr::{SubscrFuture, HostMemSubscr, MemSubscr};
+use subscr::{SubscrFuture, HostNoOpSubscr, NoOpSubscr};
 use subscr::{HostSubscr, Subscr};
 
 
@@ -82,7 +82,7 @@ impl ResolverFuture {
     }
 }
 
-fn get_suffix<'x>(cfg: &'x Arc<Config>, name: &str) -> &'x Suffix {
+pub(crate) fn get_suffix<'x>(cfg: &'x Arc<Config>, name: &str) -> &'x Suffix {
     if let Some(ref suf) = cfg.suffixes.get(name) {
         return suf;
     }
@@ -137,11 +137,7 @@ impl ResolverFuture {
         if let Some(value) = cfg.hosts.get(&name) {
             let ok = tx.swap(value.clone()).is_ok();
             if ok {
-                let update_rx = self.update_rx.clone();
-                self.spawn(SubscrFuture {
-                    update_rx,
-                    task: Some(HostMemSubscr { name, tx }),
-                });
+                SubscrFuture::spawn_in(self, HostNoOpSubscr { name, tx });
             }
             return;
         }
@@ -150,11 +146,7 @@ impl ResolverFuture {
         } else {
             // in subscription functions we don't fail, we just wait
             // for next opportunity (configuration reload?)
-            let update_rx = self.update_rx.clone();
-            self.spawn(SubscrFuture {
-                update_rx,
-                task: Some(HostMemSubscr { name, tx }),
-            });
+            SubscrFuture::spawn_in(self, HostNoOpSubscr { name, tx });
         }
     }
     pub fn subscribe(&mut self, cfg: &Arc<Config>,
@@ -163,24 +155,17 @@ impl ResolverFuture {
         if let Some(value) = cfg.services.get(&name) {
             let ok = tx.swap(value.clone()).is_ok();
             if ok {
-                let update_rx = self.update_rx.clone();
-                self.spawn(SubscrFuture {
-                    update_rx,
-                    task: Some(MemSubscr { name, tx }),
-                });
+                SubscrFuture::spawn_in(self, NoOpSubscr { name, tx });
             }
             return;
         }
-        if let Some(ref res) = get_suffix(cfg, name.as_ref()).resolver {
+        if let Some(ref sub) = get_suffix(cfg, name.as_ref()).resolver {
+            //sub.subscribe(self, sub, cfg, name, tx);
             unimplemented!();
         } else {
             // in subscription functions we don't fail, we just wait
             // for next opportunity (configuration reload?)
-            let update_rx = self.update_rx.clone();
-            self.spawn(SubscrFuture {
-                update_rx,
-                task: Some(MemSubscr { name, tx }),
-            });
+            SubscrFuture::spawn_in(self, NoOpSubscr { name, tx });
         }
     }
 }
