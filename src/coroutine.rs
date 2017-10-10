@@ -8,7 +8,7 @@ use futures::stream::FuturesUnordered;
 use futures::sync::mpsc::{UnboundedReceiver};
 use futures::sync::oneshot;
 use futures::{Stream, Future, Async};
-use tokio_core::reactor::Handle;
+use tokio_core::reactor::{Handle, Timeout};
 use void::{Void, unreachable};
 
 use config::{Config, Suffix};
@@ -39,6 +39,9 @@ pub(crate) enum FutureResult {
         next: Box<Future<Item=FutureResult, Error=Void>>,
     },
     Restart {
+        task: Box<Continuation>,
+    },
+    DelayRestart {
         task: Box<Continuation>,
     },
 }
@@ -221,6 +224,14 @@ impl Future for ResolverFuture {
                     Restart { mut task } => {
                         task.restart(self, &cfg);
                     }
+                    DelayRestart { mut task } => {
+                        self.futures.push(Box::new(
+                            Timeout::new(cfg.restart_delay, &self.handle)
+                            .expect("can always set timeout")
+                            .map_err(|_| -> Void { unreachable!() })
+                            .map(move |_| Restart { task })
+                        ) as Box<Future<Item=_, Error=_>>);
+                    }
                 }
             }
         } else {
@@ -240,6 +251,7 @@ impl Future for ResolverFuture {
                         return self.poll()
                     }
                     Restart { .. } => unreachable!(),
+                    DelayRestart { .. } => unreachable!(),
                 }
             }
         }

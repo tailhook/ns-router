@@ -1,5 +1,6 @@
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use abstract_ns::{Name, Address, Error};
 use futures::{Future, Stream, Async};
@@ -18,8 +19,15 @@ pub(crate) struct SubscrFuture<F: Task> {
     pub task: Option<F>,
 }
 
+#[must_use]
+pub(crate) enum TaskResult {
+    Continue,
+    Stop,
+    DelayRestart,
+}
+
 pub(crate) trait Task {
-    fn poll(&mut self);
+    fn poll(&mut self) -> TaskResult;
     fn restart(self, res: &mut ResolverFuture, cfg: &Arc<Config>);
 }
 
@@ -71,7 +79,17 @@ impl<F: Task + 'static> Future for SubscrFuture<F> {
             }
             Ok(Async::NotReady) => {},
         }
-        self.task.as_mut().expect("future polled twice").poll();
+        match self.task.as_mut().expect("future polled twice").poll() {
+            TaskResult::Continue => {}
+            TaskResult::Stop => return Ok(Async::Ready(FutureResult::Done)),
+            TaskResult::DelayRestart => {
+                return Ok(Async::Ready(FutureResult::DelayRestart {
+                    task: Box::new(Wrapper(Some(
+                        self.task.take().expect("future polled twice"))))
+                        as Box<Continuation>,
+                }));
+            }
+        }
         Ok(Async::NotReady)
     }
 }
@@ -102,32 +120,31 @@ impl<S: Stream<Item=Address> + 'static> Task for Subscr<S>
                 NoOpSubscr { name: self.name, tx: self.tx });
         }
     }
-    fn poll(&mut self) {
+    fn poll(&mut self) -> TaskResult {
         match self.source.poll() {
             Ok(Async::Ready(Some(x))) => {
                 if self.tx.swap(x).is_err() {
-                    unimplemented!();
-                    // silent stop
+                    return TaskResult::Stop;
                 }
             }
             Ok(Async::Ready(None))  => {
                 error!("End of stream while following {:?}", self.name);
-                unimplemented!(); // restart in a timeout
+                return TaskResult::DelayRestart;
             }
             Err(e) => {
                 error!("Error while following {:?}: {}", self.name,
                     Into::<Error>::into(e));
-                unimplemented!(); // restart in a timeout
+                return TaskResult::DelayRestart;
             }
             Ok(Async::NotReady) => {}
         }
         match self.tx.poll_cancel() {
             Ok(Async::NotReady) => {}
             _ => {
-                unimplemented!();
-                // silent stop
+                return TaskResult::Stop;
             }
         }
+        TaskResult::Continue
     }
 }
 
@@ -157,32 +174,31 @@ impl<S: Stream<Item=Vec<IpAddr>> + 'static> Task for HostSubscr<S>
                 HostNoOpSubscr { name: self.name, tx: self.tx });
         }
     }
-    fn poll(&mut self) {
+    fn poll(&mut self) -> TaskResult {
         match self.source.poll() {
             Ok(Async::Ready(Some(x))) => {
                 if self.tx.swap(x).is_err() {
-                    unimplemented!();
-                    // silent stop
+                    return TaskResult::Stop;
                 }
             }
             Ok(Async::Ready(None))  => {
                 error!("End of stream while following {:?}", self.name);
-                unimplemented!(); // restart in a timeout
+                return TaskResult::DelayRestart;
             }
             Err(e) => {
                 error!("Error while following {:?}: {}", self.name,
                     Into::<Error>::into(e));
-                unimplemented!(); // restart in a timeout
+                return TaskResult::DelayRestart;
             }
             Ok(Async::NotReady) => {}
         }
         match self.tx.poll_cancel() {
             Ok(Async::NotReady) => {}
             _ => {
-                unimplemented!();
-                // silent stop
+                return TaskResult::Stop;
             }
         }
+        TaskResult::Continue
     }
 }
 
@@ -191,8 +207,9 @@ impl Task for HostNoOpSubscr {
         // it's cheap to just resolve it again
         res.host_subscribe(cfg, self.name, self.tx);
     }
-    fn poll(&mut self) {
+    fn poll(&mut self) -> TaskResult {
         // do nothing until config changes
+        TaskResult::Continue
     }
 }
 
@@ -201,8 +218,9 @@ impl Task for NoOpSubscr {
         // it's cheap to just resolve it again
         res.subscribe(cfg, self.name, self.tx);
     }
-    fn poll(&mut self) {
+    fn poll(&mut self) -> TaskResult {
         // do nothing until config changes
+        TaskResult::Continue
     }
 }
 

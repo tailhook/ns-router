@@ -1,13 +1,14 @@
-use std::fmt::Debug;
-use std::sync::Arc;
-use std::net::IpAddr;
 use std::collections::HashMap;
+use std::fmt::Debug;
+use std::net::IpAddr;
+use std::sync::Arc;
+use std::time::Duration;
 
 use abstract_ns::{Name, Address};
 use abstract_ns::{ResolveHost, Resolve, HostSubscribe, Subscribe};
-use internal_traits::{Resolver, HostResolver, Subscriber, HostSubscriber};
-use internal_traits::{ResolveHostWrapper, ResolveWrapper};
 use internal_traits::{HostSubscribeWrapper, SubscribeWrapper};
+use internal_traits::{ResolveHostWrapper, ResolveWrapper};
+use internal_traits::{Resolver, HostResolver, Subscriber, HostSubscriber};
 
 
 /// Configuration of the router
@@ -16,9 +17,9 @@ use internal_traits::{HostSubscribeWrapper, SubscribeWrapper};
 /// a stream of configs.
 #[derive(Clone, Debug)]
 pub struct Config {
+    pub(crate) restart_delay: Duration,
     pub(crate) hosts: HashMap<Name, Vec<IpAddr>>,
     pub(crate) services: HashMap<Name, Address>,
-
     pub(crate) suffixes: HashMap<String, Suffix>,
     pub(crate) root: Suffix,
 }
@@ -37,6 +38,7 @@ impl Config {
     /// Create a new, empty config
     pub fn new() -> Config {
         Config {
+            restart_delay: Duration::from_millis(100),
             hosts: HashMap::new(),
             services: HashMap::new(),
             suffixes: HashMap::new(),
@@ -47,6 +49,15 @@ impl Config {
                 subscriber: None,
             },
         }
+    }
+
+    /// Sets delay after which router will restart any subscription stream
+    ///
+    /// This works both when stream yields end-of-stream and when stream
+    /// has returned error. Default value is 100 milliseconds.
+    pub fn restart_delay(&mut self, delay: Duration) -> &mut Self {
+        self.restart_delay = delay;
+        self
     }
 
     /// Add a host that will be resolved to list of addreses
