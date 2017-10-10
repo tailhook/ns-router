@@ -12,7 +12,7 @@ use void::Void;
 
 use config::Config;
 use coroutine::{ResolverFuture, FutureResult};
-use subscr::{SubscrFuture, HostSubscr};
+use subscr::{SubscrFuture, HostSubscr, Subscr};
 use internal::{Table, reply, fail};
 use slot;
 
@@ -32,7 +32,8 @@ pub trait HostSubscriber: Debug + 'static {
         name: Name, tx: slot::Sender<Vec<IpAddr>>);
 }
 pub trait Subscriber: Debug + 'static {
-    fn subscribe(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
+    fn subscribe(&self, res: &mut ResolverFuture,
+        sub: &Arc<Subscriber>, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Address>);
 }
 
@@ -112,10 +113,19 @@ impl<S: Subscribe + Debug + 'static> SubscribeWrapper<S> {
 impl<S> Subscriber for SubscribeWrapper<S>
     where S: Subscribe + Debug + 'static,
 {
-    fn subscribe(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
+    fn subscribe(&self, res: &mut ResolverFuture,
+        sub: &Arc<Subscriber>, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Address>)
     {
-        unimplemented!();
+        let update_rx = res.update_rx();
+        res.spawn(SubscrFuture {
+            update_rx,
+            task: Some(Subscr {
+                subscriber: sub.clone(),
+                source: self.subscriber.subscribe(&name),
+                name, tx,
+            }),
+        });
     }
 }
 

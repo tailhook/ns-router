@@ -159,9 +159,8 @@ impl ResolverFuture {
             }
             return;
         }
-        if let Some(ref sub) = get_suffix(cfg, name.as_ref()).resolver {
-            //sub.subscribe(self, sub, cfg, name, tx);
-            unimplemented!();
+        if let Some(ref sub) = get_suffix(cfg, name.as_ref()).subscriber {
+            sub.subscribe(self, sub, cfg, name, tx);
         } else {
             // in subscription functions we don't fail, we just wait
             // for next opportunity (configuration reload?)

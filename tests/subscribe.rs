@@ -9,7 +9,7 @@ use std::time::Duration;
 use futures::{lazy};
 use futures::future::{Future, Empty, IntoStream, empty};
 use futures::stream::{once, Stream, Chain, Once};
-use abstract_ns::{HostSubscribe, Subscribe, Name, Error};
+use abstract_ns::{HostSubscribe, Subscribe, Name, Address, Error};
 use ns_router::{Config, Router};
 
 
@@ -23,6 +23,16 @@ impl HostSubscribe for Mock {
     type Error = Error;
     fn subscribe_host(&self, _name: &Name) -> Self::HostStream {
         once(Ok(vec!["127.0.0.1".parse().unwrap()]))
+            .chain(empty().into_stream())
+    }
+}
+
+impl Subscribe for Mock {
+    type Stream = Chain<Once<Address, Error>,
+                            IntoStream<Empty<Address, Error>>>;
+    type Error = Error;
+    fn subscribe(&self, _name: &Name) -> Self::Stream {
+        once(Ok(vec!["127.0.0.1:1234".parse().unwrap()][..].into()))
             .chain(empty().into_stream())
     }
 }
@@ -134,4 +144,36 @@ fn test_override_after_fallback_host() {
         router.subscribe_host(&"localhost".parse().unwrap()).into_future()
     })).unwrap();
     assert_eq!(res.0, Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()]));
+}
+
+#[test]
+fn test_add_and_override_fallback_service() {
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let handle = core.handle();
+
+    let mut cfg = Config::new();
+    cfg.set_fallthrough_subscriber(Mock);
+    let (router, up) = Router::updating_config(&cfg.done(), &handle);
+
+    let res = core.run(lazy(|| {
+        router.subscribe(
+            &"_http._tcp.localhost".parse().unwrap()).into_future()
+    })).unwrap();
+    assert_eq!(res.0,
+        Some(["127.0.0.1:1234".parse::<SocketAddr>().unwrap()][..].into()));
+
+    cfg.add_service(&"_http._tcp.localhost".parse().unwrap(),
+              ["127.0.0.2:80".parse::<SocketAddr>().unwrap()][..].into());
+    up.update(&cfg.done());
+
+    let res = core.run(res.1.into_future()).unwrap();
+    assert_eq!(res.0,
+        Some(["127.0.0.2:80".parse::<SocketAddr>().unwrap()][..].into()));
+
+    let res = core.run(lazy(|| {
+        router.subscribe(
+            &"_http._tcp.localhost".parse().unwrap()).into_future()
+    })).unwrap();
+    assert_eq!(res.0,
+        Some(["127.0.0.2:80".parse::<SocketAddr>().unwrap()][..].into()));
 }
