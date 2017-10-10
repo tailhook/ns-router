@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 use std::sync::Arc;
 
-use abstract_ns::{Name, Address};
+use abstract_ns::{Name, Address, Error};
 use futures::{Future, Stream, Async};
 use futures::sync::oneshot;
 use futures::future::Shared;
@@ -85,12 +85,38 @@ impl<S: Stream<Item=Address>> Task for Subscr<S> {
     }
 }
 
-impl<S: Stream<Item=Vec<IpAddr>>> Task for HostSubscr<S> {
+impl<S: Stream<Item=Vec<IpAddr>>> Task for HostSubscr<S>
+    where S::Error: Into<Error>,
+{
     fn restart(self, res: &mut ResolverFuture, cfg: &Arc<Config>) {
         unimplemented!();
     }
     fn poll(&mut self) {
-        unimplemented!();
+        match self.source.poll() {
+            Ok(Async::Ready(Some(x))) => {
+                if self.tx.swap(x).is_err() {
+                    unimplemented!();
+                    // silent stop
+                }
+            }
+            Ok(Async::Ready(None))  => {
+                error!("End of stream while following {:?}", self.name);
+                unimplemented!(); // restart in a timeout
+            }
+            Err(e) => {
+                error!("Error while following {:?}: {}", self.name,
+                    Into::<Error>::into(e));
+                unimplemented!(); // restart in a timeout
+            }
+            Ok(Async::NotReady) => {}
+        }
+        match self.tx.poll_cancel() {
+            Ok(Async::NotReady) => {}
+            _ => {
+                unimplemented!();
+                // silent stop
+            }
+        }
     }
 }
 
