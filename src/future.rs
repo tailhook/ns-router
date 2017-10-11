@@ -1,4 +1,5 @@
-//! Futures and streams returned from resolver
+//! Futures and streams returned from router
+//!
 use abstract_ns::{Name, IpList, Address, Error};
 use abstract_ns::{Resolve, ResolveHost, Subscribe, HostSubscribe};
 use futures::sync::oneshot;

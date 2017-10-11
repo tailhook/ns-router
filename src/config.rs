@@ -12,8 +12,8 @@ use internal_traits::{Resolver, HostResolver, Subscriber, HostSubscriber};
 
 /// Configuration of the router
 ///
-/// It has a builder interface. You can create a router from `Arc<Config>` or
-/// a stream of configs.
+/// It has a builder interface. You can create a router from `Arc<Config>`
+/// (made by `Config::done`) or a stream of configs.
 #[derive(Clone, Debug)]
 pub struct Config {
     pub(crate) restart_delay: Duration,
