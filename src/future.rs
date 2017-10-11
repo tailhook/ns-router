@@ -1,3 +1,4 @@
+//! Futures and streams returned from resolver
 use abstract_ns::{Name, IpList, Address, Error};
 use abstract_ns::{Resolve, ResolveHost, Subscribe, HostSubscribe};
 use futures::sync::oneshot;
@@ -7,15 +8,19 @@ use void::Void;
 use slot;
 use router::Router;
 
+/// A future returned from `Router::resolve_host`
 #[derive(Debug)]
 pub struct ResolveHostFuture(oneshot::Receiver<Result<IpList, Error>>);
 
+/// A future returned from `Router::resolve`
 #[derive(Debug)]
 pub struct ResolveFuture(oneshot::Receiver<Result<Address, Error>>);
 
+/// A stream returned from `Router::host_subscribe`
 #[derive(Debug)]
 pub struct HostStream(slot::Receiver<IpList>);
 
+/// A stream returned from `Router::subscribe`
 #[derive(Debug)]
 pub struct AddrStream(slot::Receiver<Address>);
 

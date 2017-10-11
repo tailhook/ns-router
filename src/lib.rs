@@ -9,7 +9,6 @@ extern crate tokio_core;
 extern crate void;
 #[macro_use] extern crate log;
 
-mod abstract_impl;
 mod cell;
 mod config;
 mod coroutine;
@@ -18,6 +17,7 @@ mod internal_traits;
 mod router;
 mod slot;  // TODO(tailhook) it should be added to futures-rs
 mod subscr;
+pub mod future;
 
 pub use router::Router;
 pub use config::Config;
