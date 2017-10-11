@@ -29,7 +29,7 @@ fn test_host() {
     // Then can query cached hosts immediately
     assert_eq!(
         router.resolve_host(&"localhost".parse().unwrap()).wait().unwrap(),
-        vec!["127.0.0.1".parse::<IpAddr>().unwrap()]);
+        vec!["127.0.0.1".parse::<IpAddr>().unwrap()].into());
 }
 
 #[test]

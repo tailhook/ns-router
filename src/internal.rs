@@ -1,8 +1,7 @@
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::net::IpAddr;
 
-use abstract_ns::{Name, Error, Address};
+use abstract_ns::{Name, Error, Address, IpList};
 use futures::Stream;
 use futures::sync::oneshot;
 use futures::sync::mpsc::{UnboundedSender, unbounded};
@@ -17,9 +16,9 @@ use void::Void;
 
 #[derive(Debug)]
 pub enum Request {
-    ResolveHost(Name, oneshot::Sender<Result<Vec<IpAddr>, Error>>),
+    ResolveHost(Name, oneshot::Sender<Result<IpList, Error>>),
     Resolve(Name, oneshot::Sender<Result<Address, Error>>),
-    HostSubscribe(Name, slot::Sender<Vec<IpAddr>>),
+    HostSubscribe(Name, slot::Sender<IpList>),
     Subscribe(Name, slot::Sender<Address>),
 }
 
@@ -44,7 +43,7 @@ impl Table {
     }
 
     pub fn resolve_host(&self, name: &Name,
-        tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
+        tx: oneshot::Sender<Result<IpList, Error>>)
     {
         // shortcut if config exists and this is an in-memory host
         if let Some(cfg) = self.cfg.get() {
@@ -91,9 +90,7 @@ impl Table {
         }
     }
 
-    pub fn subscribe_host(&self, name: &Name,
-        tx: slot::Sender<Vec<IpAddr>>)
-    {
+    pub fn subscribe_host(&self, name: &Name, tx: slot::Sender<IpList>) {
         self.requests.unbounded_send(
             Request::HostSubscribe(name.clone(), tx)).ok();
         // TODO(tailhook) log a warning on error?

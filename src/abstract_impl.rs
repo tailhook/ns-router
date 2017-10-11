@@ -1,6 +1,4 @@
-use std::net::IpAddr;
-
-use abstract_ns::{Name, Address, Error};
+use abstract_ns::{Name, IpList, Address, Error};
 use abstract_ns::{Resolve, ResolveHost, Subscribe, HostSubscribe};
 use futures::sync::oneshot;
 use futures::{Future, Async, Stream};
@@ -10,13 +8,13 @@ use slot;
 use router::Router;
 
 #[derive(Debug)]
-pub struct ResolveHostFuture(oneshot::Receiver<Result<Vec<IpAddr>, Error>>);
+pub struct ResolveHostFuture(oneshot::Receiver<Result<IpList, Error>>);
 
 #[derive(Debug)]
 pub struct ResolveFuture(oneshot::Receiver<Result<Address, Error>>);
 
 #[derive(Debug)]
-pub struct HostStream(slot::Receiver<Vec<IpAddr>>);
+pub struct HostStream(slot::Receiver<IpList>);
 
 #[derive(Debug)]
 pub struct AddrStream(slot::Receiver<Address>);
@@ -62,10 +60,10 @@ impl Subscribe for Router {
 }
 
 impl Future for ResolveHostFuture {
-    type Item = Vec<IpAddr>;
+    type Item = IpList;
     type Error = Error;
     #[inline(always)]
-    fn poll(&mut self) -> Result<Async<Vec<IpAddr>>, Error> {
+    fn poll(&mut self) -> Result<Async<IpList>, Error> {
         match self.0.poll().map_err(|e| Error::TemporaryError(e.into()))? {
             Async::NotReady => Ok(Async::NotReady),
             Async::Ready(Ok(r))  => Ok(Async::Ready(r)),
@@ -88,10 +86,10 @@ impl Future for ResolveFuture {
 }
 
 impl Stream for HostStream {
-    type Item = Vec<IpAddr>;
+    type Item = IpList;
     type Error = Void;
     #[inline(always)]
-    fn poll(&mut self) -> Result<Async<Option<Vec<IpAddr>>>, Void> {
+    fn poll(&mut self) -> Result<Async<Option<IpList>>, Void> {
         match self.0.poll() {
             Ok(r) => Ok(r),
             Err(_) => Ok(Async::Ready(None)),

@@ -9,7 +9,7 @@ use std::time::Duration;
 use futures::{lazy};
 use futures::future::{Future, Empty, IntoStream, empty};
 use futures::stream::{once, Stream, Chain, Once};
-use abstract_ns::{HostSubscribe, Subscribe, Name, Address, Error};
+use abstract_ns::{HostSubscribe, Subscribe, Name, Address, IpList, Error};
 use ns_router::{Config, Router};
 
 
@@ -18,11 +18,11 @@ struct Mock;
 
 
 impl HostSubscribe for Mock {
-    type HostStream = Chain<Once<Vec<IpAddr>, Error>,
-                            IntoStream<Empty<Vec<IpAddr>, Error>>>;
+    type HostStream = Chain<Once<IpList, Error>,
+                            IntoStream<Empty<IpList, Error>>>;
     type Error = Error;
     fn subscribe_host(&self, _name: &Name) -> Self::HostStream {
-        once(Ok(vec!["127.0.0.1".parse().unwrap()]))
+        once(Ok(vec!["127.0.0.1".parse().unwrap()].into()))
             .chain(empty().into_stream())
     }
 }
@@ -52,19 +52,22 @@ fn test_overridden_host() {
     let res = core.run(lazy(|| {
         router.subscribe_host(&"localhost".parse().unwrap()).into_future()
     })).unwrap();
-    assert_eq!(res.0, Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()]));
+    assert_eq!(res.0,
+        Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()].into()));
 
     cfg.add_host(&"localhost".parse().unwrap(),
             vec!["127.0.0.2".parse::<IpAddr>().unwrap()]);
     up.update(&cfg.done());
 
     let res = core.run(res.1.into_future()).unwrap();
-    assert_eq!(res.0, Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()]));
+    assert_eq!(res.0,
+        Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()].into()));
 
     let res = core.run(lazy(|| {
         router.subscribe_host(&"localhost".parse().unwrap()).into_future()
     })).unwrap();
-    assert_eq!(res.0, Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()]));
+    assert_eq!(res.0,
+        Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()].into()));
 }
 
 #[test]
@@ -116,7 +119,8 @@ fn test_fallback_host() {
     let res = core.run(lazy(|| {
         router.subscribe_host(&"localhost".parse().unwrap()).into_future()
     })).unwrap();
-    assert_eq!(res.0, Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()]));
+    assert_eq!(res.0,
+        Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()].into()));
 }
 
 
@@ -133,7 +137,8 @@ fn test_override_after_fallback_host() {
     let res = core.run(lazy(|| {
         router.subscribe_host(&"localhost".parse().unwrap()).into_future()
     })).unwrap();
-    assert_eq!(res.0, Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()]));
+    assert_eq!(res.0,
+        Some(vec!["127.0.0.1".parse::<IpAddr>().unwrap()].into()));
 
     let mut cfg = Config::new();
     cfg.add_host(&"localhost".parse().unwrap(),
@@ -143,7 +148,8 @@ fn test_override_after_fallback_host() {
     let res = core.run(lazy(|| {
         router.subscribe_host(&"localhost".parse().unwrap()).into_future()
     })).unwrap();
-    assert_eq!(res.0, Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()]));
+    assert_eq!(res.0,
+        Some(vec!["127.0.0.2".parse::<IpAddr>().unwrap()].into()));
 }
 
 #[test]

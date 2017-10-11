@@ -1,8 +1,7 @@
 use std::fmt::{Debug};
 use std::sync::Arc;
-use std::net::IpAddr;
 
-use abstract_ns::{Address, Name, Error};
+use abstract_ns::{Address, IpList, Name, Error};
 use abstract_ns::{ResolveHost, Resolve, HostSubscribe, Subscribe};
 use futures::{Future, Async};
 use futures::sync::oneshot;
@@ -17,7 +16,7 @@ use slot;
 
 pub trait HostResolver: Debug + 'static {
     fn resolve_host(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
-        name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>);
+        name: Name, tx: oneshot::Sender<Result<IpList, Error>>);
 }
 
 pub trait Resolver: Debug + 'static {
@@ -27,7 +26,7 @@ pub trait Resolver: Debug + 'static {
 pub trait HostSubscriber: Debug + 'static {
     fn host_subscribe(&self, res: &mut ResolverFuture,
         sub: &Arc<HostSubscriber>, cfg: &Arc<Config>,
-        name: Name, tx: slot::Sender<Vec<IpAddr>>);
+        name: Name, tx: slot::Sender<IpList>);
 }
 pub trait Subscriber: Debug + 'static {
     fn subscribe(&self, res: &mut ResolverFuture,
@@ -60,7 +59,7 @@ pub struct SubscribeWrapper<S: Subscribe> {
 
 impl<R: ResolveHost + Debug + 'static> HostResolver for ResolveHostWrapper<R> {
     fn resolve_host(&self, res: &mut ResolverFuture, _cfg: &Arc<Config>,
-        name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
+        name: Name, tx: oneshot::Sender<Result<IpList, Error>>)
     {
         let future = self.resolver.resolve_host(&name);
         res.spawn(SendResult(name, future, Some(tx)));
@@ -132,7 +131,7 @@ impl<S> HostSubscriber for HostSubscribeWrapper<S>
 {
     fn host_subscribe(&self, res: &mut ResolverFuture,
         sub: &Arc<HostSubscriber>, _cfg: &Arc<Config>,
-        name: Name, tx: slot::Sender<Vec<IpAddr>>)
+        name: Name, tx: slot::Sender<IpList>)
     {
         let update_rx = res.update_rx();
         res.spawn(SubscrFuture {

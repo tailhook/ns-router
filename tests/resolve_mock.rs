@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use futures::{lazy};
 use futures::future::{FutureResult, ok};
-use abstract_ns::{ResolveHost, Resolve, Name, Address, Error};
+use abstract_ns::{ResolveHost, Resolve, Name, Address, IpList, Error};
 use ns_router::{Config, Router};
 
 
@@ -20,16 +20,16 @@ struct Mock2;
 
 
 impl ResolveHost for Mock {
-    type FutureHost = FutureResult<Vec<IpAddr>, Error>;
+    type FutureHost = FutureResult<IpList, Error>;
     fn resolve_host(&self, _name: &Name) -> Self::FutureHost {
-        ok(vec!["127.0.0.1".parse().unwrap()])
+        ok(vec!["127.0.0.1".parse().unwrap()].into())
     }
 }
 
 impl ResolveHost for Mock2 {
-    type FutureHost = FutureResult<Vec<IpAddr>, Error>;
+    type FutureHost = FutureResult<IpList, Error>;
     fn resolve_host(&self, _name: &Name) -> Self::FutureHost {
-        ok(vec!["127.0.0.2".parse().unwrap()])
+        ok(vec!["127.0.0.2".parse().unwrap()].into())
     }
 }
 
@@ -64,7 +64,7 @@ fn test_fallback_host() {
     let res = core.run(lazy(|| {
         router.resolve_host(&"localhost".parse().unwrap())
     })).unwrap();
-    assert_eq!(res, vec!["127.0.0.1".parse::<IpAddr>().unwrap()]);
+    assert_eq!(res, vec!["127.0.0.1".parse::<IpAddr>().unwrap()].into());
 }
 
 #[test]
@@ -106,12 +106,12 @@ fn test_host_suffix() {
     let res = core.run(lazy(|| {
         router.resolve_host(&"x.consul".parse().unwrap())
     })).unwrap();
-    assert_eq!(res, vec!["127.0.0.2".parse::<IpAddr>().unwrap()]);
+    assert_eq!(res, vec!["127.0.0.2".parse::<IpAddr>().unwrap()].into());
 
     let res = core.run(lazy(|| {
         router.resolve_host(&"localhost".parse().unwrap())
     })).unwrap();
-    assert_eq!(res, vec!["127.0.0.1".parse::<IpAddr>().unwrap()]);
+    assert_eq!(res, vec!["127.0.0.1".parse::<IpAddr>().unwrap()].into());
 }
 
 #[test]

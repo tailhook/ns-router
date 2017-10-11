@@ -1,7 +1,6 @@
-use std::net::IpAddr;
 use std::sync::Arc;
 
-use abstract_ns::{Name, Address, Error};
+use abstract_ns::{Name, Address, IpList, Error};
 use futures::{Future, Stream, Async};
 use futures::sync::oneshot;
 use futures::future::Shared;
@@ -37,16 +36,16 @@ pub(crate) struct Subscr<S: Stream<Item=Address>> {
     pub tx: slot::Sender<Address>,
 }
 
-pub(crate) struct HostSubscr<S: Stream<Item=Vec<IpAddr>>> {
+pub(crate) struct HostSubscr<S: Stream<Item=IpList>> {
     pub name: Name,
     pub subscriber: Arc<HostSubscriber>,
     pub source: S,
-    pub tx: slot::Sender<Vec<IpAddr>>,
+    pub tx: slot::Sender<IpList>,
 }
 
 pub(crate) struct HostNoOpSubscr {
     pub name: Name,
-    pub tx: slot::Sender<Vec<IpAddr>>,
+    pub tx: slot::Sender<IpList>,
 }
 
 pub(crate) struct NoOpSubscr {
@@ -147,7 +146,7 @@ impl<S: Stream<Item=Address> + 'static> Task for Subscr<S>
     }
 }
 
-impl<S: Stream<Item=Vec<IpAddr>> + 'static> Task for HostSubscr<S>
+impl<S: Stream<Item=IpList> + 'static> Task for HostSubscr<S>
     where S::Error: Into<Error>,
 {
     fn restart(self, res: &mut ResolverFuture, cfg: &Arc<Config>) {

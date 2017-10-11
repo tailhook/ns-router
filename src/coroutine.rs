@@ -1,8 +1,7 @@
 use std::sync::{Arc, Weak};
-use std::net::IpAddr;
 use std::mem;
 
-use abstract_ns::{Address, Name, Error};
+use abstract_ns::{Address, IpList, Name, Error};
 use futures::future::Shared;
 use futures::stream::FuturesUnordered;
 use futures::sync::mpsc::{UnboundedReceiver};
@@ -104,7 +103,7 @@ impl ResolverFuture {
             as Box<Future<Item=FutureResult, Error=Void>>)
     }
     fn resolve_host(&mut self, cfg: &Arc<Config>,
-        name: Name, tx: oneshot::Sender<Result<Vec<IpAddr>, Error>>)
+        name: Name, tx: oneshot::Sender<Result<IpList, Error>>)
     {
         // need to retry resolving static host because the config might just
         // arrived right now
@@ -134,7 +133,7 @@ impl ResolverFuture {
         }
     }
     pub fn host_subscribe(&mut self, cfg: &Arc<Config>,
-        name: Name, tx: slot::Sender<Vec<IpAddr>>)
+        name: Name, tx: slot::Sender<IpList>)
     {
         if let Some(value) = cfg.hosts.get(&name) {
             let ok = tx.swap(value.clone()).is_ok();

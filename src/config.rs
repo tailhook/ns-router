@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use abstract_ns::{Name, Address};
+use abstract_ns::{Name, Address, IpList};
 use abstract_ns::{ResolveHost, Resolve, HostSubscribe, Subscribe};
 use internal_traits::{HostSubscribeWrapper, SubscribeWrapper};
 use internal_traits::{ResolveHostWrapper, ResolveWrapper};
@@ -18,7 +17,7 @@ use internal_traits::{Resolver, HostResolver, Subscriber, HostSubscriber};
 #[derive(Clone, Debug)]
 pub struct Config {
     pub(crate) restart_delay: Duration,
-    pub(crate) hosts: HashMap<Name, Vec<IpAddr>>,
+    pub(crate) hosts: HashMap<Name, IpList>,
     pub(crate) services: HashMap<Name, Address>,
     pub(crate) suffixes: HashMap<String, Suffix>,
     pub(crate) root: Suffix,
@@ -63,8 +62,11 @@ impl Config {
     /// Add a host that will be resolved to list of addreses
     ///
     /// Hosts added by this host method overrides any other resolvers.
-    pub fn add_host(&mut self, name: &Name, addr: Vec<IpAddr>) -> &mut Self {
-        self.hosts.insert(name.clone(), addr);
+    pub fn add_host<A>(&mut self, name: &Name, addr: A)
+        -> &mut Self
+        where A: Into<IpList>
+    {
+        self.hosts.insert(name.clone(), addr.into());
         self
     }
 
