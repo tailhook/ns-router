@@ -8,6 +8,7 @@ extern crate futures;
 extern crate tokio_core;
 extern crate void;
 #[macro_use] extern crate log;
+#[macro_use] extern crate quick_error;
 
 mod cell;
 mod config;
@@ -17,7 +18,9 @@ mod internal_traits;
 mod router;
 mod slot;  // TODO(tailhook) it should be added to futures-rs
 mod subscr;
+mod name;
 pub mod future;
 
 pub use router::Router;
 pub use config::Config;
+pub use name::AutoName;
