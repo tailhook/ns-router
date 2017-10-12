@@ -19,11 +19,11 @@ pub struct ResolveFuture(oneshot::Receiver<Result<Address, Error>>);
 
 /// A stream returned from `Router::host_subscribe`
 #[derive(Debug)]
-pub struct HostStream(slot::Receiver<IpList>);
+pub struct HostStream(pub(crate) slot::Receiver<IpList>);
 
 /// A stream returned from `Router::subscribe`
 #[derive(Debug)]
-pub struct AddrStream(slot::Receiver<Address>);
+pub struct AddrStream(pub(crate) slot::Receiver<Address>);
 
 
 impl ResolveHost for Router {

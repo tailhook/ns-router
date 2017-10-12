@@ -2,17 +2,20 @@ use std::str::FromStr;
 use std::num::ParseIntError;
 
 use abstract_ns::name::{self, Name};
+use quick_error::ResultExt;
 
 quick_error! {
     #[derive(Debug)]
     pub enum Error {
-        Name(err: name::Error) {
+        Name(name: String, err: name::Error) {
             cause(err)
-            from()
+            context(name: &'a str, err: name::Error)
+                -> (name.to_string(), err)
         }
-        Port(err: ParseIntError) {
+        Port(name: String, err: ParseIntError) {
             cause(err)
-            from()
+            context(name: &'a str, err: ParseIntError)
+                -> (name.to_string(), err)
         }
     }
 }
@@ -67,21 +70,28 @@ impl<'a> AutoName<'a> {
         match *self {
             A::Auto(x) => {
                 if x.starts_with("_") {
-                    Ok(I::Service(Name::from_str(x)?))
+                    Ok(I::Service(Name::from_str(x).context(x)?))
                 } else if let Some(pos) = x.find(':') {
-                    Ok(I::HostPort(Name::from_str(&x[..pos])?,
-                                   x[pos+1..].parse()?))
+                    Ok(I::HostPort(Name::from_str(&x[..pos]).context(x)?,
+                                   x[pos+1..].parse().context(x)?))
                 } else {
-                    Ok(I::HostPort(Name::from_str(x)?, default_port))
+                    Ok(I::HostPort(Name::from_str(x).context(x)?,
+                                   default_port))
                 }
             }
             A::HostPort(name, port)
-            => Ok(I::HostPort(Name::from_str(name)?, port)),
+            => Ok(I::HostPort(Name::from_str(name).context(name)?, port)),
             A::HostDefaultPort(name)
-            => Ok(I::HostPort(Name::from_str(name)?, default_port)),
+            => Ok(I::HostPort(Name::from_str(name).context(name)?, default_port)),
             A::Service(name)
-            => Ok(I::Service(Name::from_str(name)?)),
+            => Ok(I::Service(Name::from_str(name).context(name)?)),
         }
+    }
+}
+
+impl<'a, T: AsRef<str> + 'a> From<&'a T> for AutoName<'a> {
+    fn from(val: &'a T) -> AutoName<'a> {
+        AutoName::Auto(val.as_ref())
     }
 }
 

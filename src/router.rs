@@ -8,6 +8,8 @@ use tokio_core::reactor::Handle;
 use void::Void;
 
 use config::Config;
+use future::AddrStream;
+use name::AutoName;
 use slot;
 
 
@@ -59,6 +61,78 @@ impl Router {
             .map_err(|_| unreachable!());
         return (Router(Table::new(stream, handle)), UpdateSink(tx));
     }
+
+    /// Subscribes to a list of names
+    ///
+    /// This is intended to keep list of services in configuration file,
+    /// like this (yaml):
+    ///
+    /// ```yaml
+    /// addresses:
+    /// - example.org:8080
+    /// - _my._svc.example.org  # SVC record
+    /// - example.net           # default port
+    /// ```
+    ///
+    /// You can also specify a way to resolve the service by providing
+    /// iterator over `AutoName` instances instead of plain `&str` (both are
+    /// accepted in this method).
+    pub fn subscribe_many<'x, I>(&self, iter: I, default_port: u16)
+        -> AddrStream
+        where I: IntoIterator,
+              I::Item: Into<AutoName<'x>>,
+    {
+        let (tx, rx) = slot::channel();
+        let mut lst = Vec::new();
+        for addr in iter {
+            match addr.into().parse(default_port) {
+                Ok(x) => lst.push(x),
+                Err(e) => {
+                    warn!("Error parsing name: {}", e);
+                }
+            }
+        }
+        self.0.subscribe_list_stream(
+            once(Ok::<_, ()>(lst)).chain(empty().into_stream()),
+            tx);
+        AddrStream(rx)
+    }
+
+    /// Subscribes to a stream that yields lists of names
+    ///
+    /// See the description of [`subscribe_many`](#tymethod.subscribe_many)
+    /// for the description of the list of names that must be yielded from
+    /// the stream.
+    ///
+    /// Note: this is meant for configuration update scenario. I.e. when
+    /// configuration is reloaded and new list of names is received, it
+    /// should be pushed to this stream. The items received in the stream
+    /// are non-cumulative and replace previous list.
+    ///
+    /// Note 2: If stream is errored or end-of-stream reached, this means
+    /// name is not needed any more and its `AddrStream` will be shut down,
+    /// presumably shutting down everything that depends on it.
+    pub fn subscribe_many_stream<'x, S>(&self, stream: S, default_port: u16)
+        -> AddrStream
+        where S: Stream,
+              S::Item: IntoIterator,
+              <S::Item as IntoIterator>::Item: Into<AutoName<'x>>,
+    {
+        let (tx, rx) = slot::channel();
+        self.0.subscribe_list_stream(stream.map(|iter| {
+            let mut lst = Vec::new();
+            for addr in iter {
+                match addr.into().parse(default_port) {
+                    Ok(x) => lst.push(x),
+                    Err(e) => {
+                        warn!("Error parsing name: {}", e);
+                    }
+                }
+            }
+            lst
+        }), tx);
+        AddrStream(rx)
+    }
 }
 
 impl UpdateSink {
@@ -67,5 +141,28 @@ impl UpdateSink {
     /// Returns `true` if send worked (meaning router is still alive).
     pub fn update(&self, config: &Arc<Config>) -> bool {
         self.0.swap(config.clone()).is_ok()
+    }
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+mod type_test {
+    use name::AutoName;
+    use super::Router;
+
+    fn test_vec_string(r: &Router, v: Vec<String>) {
+        r.subscribe_many(&v, 1);
+    }
+
+    fn test_vec_str(r: &Router, v: Vec<&str>) {
+        r.subscribe_many(&v, 1);
+    }
+
+    fn test_vec_auto(r: &Router, v: Vec<AutoName>) {
+        r.subscribe_many(v, 1);
+    }
+
+    fn test_map_auto(r: &Router, v: Vec<&str>) {
+        r.subscribe_many(v.into_iter().map(AutoName::Auto), 1);
     }
 }

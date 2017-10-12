@@ -10,6 +10,7 @@ use tokio_core::reactor::Handle;
 use cell::ConfigCell;
 use config::Config;
 use coroutine::ResolverFuture;
+use name::InternalName;
 use slot;
 use void::Void;
 
@@ -100,6 +101,13 @@ impl Table {
         self.requests.unbounded_send(
             Request::Subscribe(name.clone(), tx)).ok();
         // TODO(tailhook) log a warning on error?
+    }
+
+    pub(crate) fn subscribe_list_stream<S>(&self,
+        stream: S, tx: slot::Sender<Address>)
+        where S: Stream<Item=Vec<InternalName>>,
+    {
+        unimplemented!();
     }
 }
 
