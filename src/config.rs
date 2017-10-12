@@ -17,6 +17,7 @@ use internal_traits::{Resolver, HostResolver, Subscriber, HostSubscriber};
 #[derive(Clone, Debug)]
 pub struct Config {
     pub(crate) restart_delay: Duration,
+    pub(crate) convergence_delay: Duration,
     pub(crate) hosts: HashMap<Name, IpList>,
     pub(crate) services: HashMap<Name, Address>,
     pub(crate) suffixes: HashMap<String, Suffix>,
@@ -38,6 +39,7 @@ impl Config {
     pub fn new() -> Config {
         Config {
             restart_delay: Duration::from_millis(100),
+            convergence_delay: Duration::from_millis(100),
             hosts: HashMap::new(),
             services: HashMap::new(),
             suffixes: HashMap::new(),
@@ -56,6 +58,39 @@ impl Config {
     /// has returned error. Default value is 100 milliseconds.
     pub fn restart_delay(&mut self, delay: Duration) -> &mut Self {
         self.restart_delay = delay;
+        self
+    }
+
+    /// Sets delay used by [`subscribe_many`] family of functions
+    ///
+    /// The timeout is set when a new set of names arrives via stream or
+    /// when configuration is updated. While the timer is active we don't
+    /// send name updates to the application unless all (new) names are
+    /// resolved.
+    ///
+    /// Good value is bigger than 90 or 99 percentile of name request
+    /// latency, but small enough that delay of this long doesn't introduce
+    /// any hiccups on the application.
+    ///
+    /// For example, if there are names [A, B, C] if C is resolved first
+    /// we wait for the 100 millisecond (by default) timer to finish
+    /// to let A and B also be resolved. If they aren't within the period
+    /// only names in `C` are returned.
+    ///
+    /// Note if names are reloved later, they are added to the address set
+    /// and update is delivered to the client. I.e. it's only important
+    /// something depends on the first address value.
+    ///
+    /// The case where it's important is following: Client establishes
+    /// few persistent connections by picking random IP Addresses from the
+    /// set. Once new addresses arrive connections are still hold until
+    /// one of them is broken. In this case, the first address (or the
+    /// one that can be resolved faster for any reason) would have more
+    /// connections received in most cases which might be a problem.
+    ///
+    /// [`subscribe_many`]: struct.Router.html#tymethod.subscribe_many
+    pub fn convergence_delay(&mut self, delay: Duration) -> &mut Self {
+        self.convergence_delay = delay;
         self
     }
 
