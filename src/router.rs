@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::Arc;
 
 use futures::{Stream, Future};
@@ -92,8 +93,8 @@ impl Router {
                 }
             }
         }
-        self.0.subscribe_list_stream(
-            once(Ok::<_, ()>(lst)).chain(empty().into_stream()),
+        self.0.subscribe_stream(
+            once(Ok::<_, Void>(lst)).chain(empty().into_stream()),
             tx);
         AddrStream(rx)
     }
@@ -114,12 +115,13 @@ impl Router {
     /// presumably shutting down everything that depends on it.
     pub fn subscribe_many_stream<'x, S>(&self, stream: S, default_port: u16)
         -> AddrStream
-        where S: Stream,
+        where S: Stream + 'static,
               S::Item: IntoIterator,
+              S::Error: fmt::Display,
               <S::Item as IntoIterator>::Item: Into<AutoName<'x>>,
     {
         let (tx, rx) = slot::channel();
-        self.0.subscribe_list_stream(stream.map(|iter| {
+        self.0.subscribe_stream(stream.map(move |iter| {
             let mut lst = Vec::new();
             for addr in iter {
                 match addr.into().parse(default_port) {

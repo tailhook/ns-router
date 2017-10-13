@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt;
 use std::sync::Arc;
 
 use abstract_ns::{Name, Error, Address, IpList};
@@ -6,26 +6,29 @@ use futures::Stream;
 use futures::sync::oneshot;
 use futures::sync::mpsc::{UnboundedSender, unbounded};
 use tokio_core::reactor::Handle;
+use void::Void;
 
 use cell::ConfigCell;
 use config::Config;
-use coroutine::ResolverFuture;
+use coroutine::{ResolverFuture, Continuation};
+use multisubscr::MultiSubscr;
 use name::InternalName;
 use slot;
-use void::Void;
+use subscr::{Wrapper};
 
 
 #[derive(Debug)]
-pub enum Request {
+pub(crate) enum Request {
     ResolveHost(Name, oneshot::Sender<Result<IpList, Error>>),
     Resolve(Name, oneshot::Sender<Result<Address, Error>>),
     HostSubscribe(Name, slot::Sender<IpList>),
     Subscribe(Name, slot::Sender<Address>),
+    Task(Box<Continuation>),
 }
 
 
 #[derive(Debug)]
-pub struct Table {
+pub(crate) struct Table {
     pub cfg: ConfigCell,
     pub requests: UnboundedSender<Request>,
 }
@@ -103,15 +106,18 @@ impl Table {
         // TODO(tailhook) log a warning on error?
     }
 
-    pub(crate) fn subscribe_list_stream<S>(&self,
+    pub(crate) fn subscribe_stream<S>(&self,
         stream: S, tx: slot::Sender<Address>)
-        where S: Stream<Item=Vec<InternalName>>,
+        where S: Stream<Item=Vec<InternalName>> + 'static,
+              S::Error: fmt::Display,
     {
-        unimplemented!();
+        self.requests.unbounded_send(
+            Request::Task(Wrapper::wrap(MultiSubscr::new(stream, tx)))).ok();
+        // TODO(tailhook) log a warning on error?
     }
 }
 
-pub fn reply<X: Send + Debug + 'static>(name: &Name,
+pub fn reply<X: Send + fmt::Debug + 'static>(name: &Name,
     tx: oneshot::Sender<Result<X, Error>>, value: X)
 {
     tx.send(Ok(value))
@@ -122,7 +128,7 @@ pub fn reply<X: Send + Debug + 'static>(name: &Name,
         .ok();
 }
 
-pub fn fail<X: Debug>(name: &Name,
+pub fn fail<X: fmt::Debug>(name: &Name,
     tx: oneshot::Sender<Result<X, Error>>, error: Error)
 {
     tx.send(Err(error))

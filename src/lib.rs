@@ -1,5 +1,4 @@
 //! A full-featured router for abstract-ns
-//!
 #![warn(missing_docs)]
 #![warn(missing_debug_implementations)]
 
@@ -15,10 +14,11 @@ mod config;
 mod coroutine;
 mod internal;
 mod internal_traits;
+mod multisubscr;
+mod name;
 mod router;
 mod slot;  // TODO(tailhook) it should be added to futures-rs
 mod subscr;
-mod name;
 pub mod future;
 
 pub use router::Router;

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::{Arc, Weak};
 use std::mem;
 
@@ -25,7 +26,7 @@ pub struct ResolverFuture {
     handle: Handle,
 }
 
-pub(crate) trait Continuation {
+pub(crate) trait Continuation: fmt::Debug {
     fn restart(&mut self, res: &mut ResolverFuture, cfg: &Arc<Config>);
 }
 
@@ -59,7 +60,7 @@ fn mapper<S>(res: Result<(Option<Arc<Config>>, S), (Void, S)>)
 }
 
 impl ResolverFuture {
-    pub fn new<S>(config: S, requests: UnboundedReceiver<Request>,
+    pub(crate) fn new<S>(config: S, requests: UnboundedReceiver<Request>,
         table: &Arc<Table>, handle: &Handle)
         -> ResolverFuture
         where S: Stream<Item=Arc<Config>, Error=Void> + 'static
@@ -80,6 +81,9 @@ impl ResolverFuture {
     }
     pub fn update_rx(&self) -> Shared<oneshot::Receiver<()>> {
         self.update_rx.clone()
+    }
+    pub fn handle(&self) -> &Handle {
+        &self.handle
     }
 }
 
@@ -195,6 +199,9 @@ impl Future for ResolverFuture {
                     }
                     Async::Ready(Some(Subscribe(n, tx))) => {
                         self.subscribe(&cfg, n, tx);
+                    }
+                    Async::Ready(Some(Task(mut task))) => {
+                        task.restart(self, &cfg);
                     }
                     Async::Ready(None) => {
                         error!("Router input stream is done");

@@ -6,6 +6,7 @@ use std::sync::{Arc, Weak, Mutex};
 
 use futures::task::{self, Task};
 use futures::{Sink, Stream, AsyncSink, Async, Poll, StartSend};
+use void::Void;
 
 /// Slot is very similar to unbounded channel but only stores last value sent
 ///
@@ -108,7 +109,7 @@ impl<T> Sender<T> {
     ///
     /// If you're calling this function from a context that does not have a
     /// task, then you can use the `is_canceled` API instead.
-    pub fn poll_cancel(&mut self) -> Poll<(), ()> {
+    pub fn poll_cancel(&mut self) -> Poll<(), Void> {
         if let Some(ref lock) = self.inner.upgrade() {
             let mut inner = lock.lock().unwrap();
             inner.cancel_task = Some(task::current());
@@ -176,8 +177,8 @@ impl<T> Drop for Sender<T> {
 
 impl<T> Stream for Receiver<T> {
     type Item = T;
-    type Error = ();  // actually void
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    type Error = Void;
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Void> {
         let result = {
             let mut inner = self.inner.lock().unwrap();
             if inner.value.is_none() {

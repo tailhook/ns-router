@@ -55,7 +55,7 @@ pub enum AutoName<'a> {
     Service(&'a str),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub(crate) enum InternalName {
     HostPort(Name, u16),
     Service(Name),

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::Arc;
 
 use abstract_ns::{Name, Address, IpList, Error};
@@ -21,6 +22,7 @@ pub(crate) struct SubscrFuture<F: Task> {
 pub(crate) enum TaskResult {
     Continue,
     Stop,
+    Restart,
     DelayRestart,
 }
 
@@ -55,6 +57,19 @@ pub(crate) struct NoOpSubscr {
 
 pub(crate) struct Wrapper<T: Task>(Option<T>);
 
+impl<T: Task> fmt::Debug for Wrapper<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Wrapper")
+    }
+}
+
+impl<T: Task + 'static> Wrapper<T> {
+    pub(crate) fn wrap(task: T) -> Box<Continuation> {
+        Box::new(Wrapper(Some(task))) as Box<Continuation>
+    }
+}
+
+
 impl<T: Task> Continuation for Wrapper<T> {
     fn restart(&mut self, res: &mut ResolverFuture, cfg: &Arc<Config>) {
         self.0.take().expect("continuation called twice")
@@ -69,9 +84,8 @@ impl<F: Task + 'static> Future for SubscrFuture<F> {
         match self.update_rx.poll() {
             Ok(Async::Ready(_)) | Err(_) => {
                 return Ok(Async::Ready(FutureResult::Restart {
-                    task: Box::new(Wrapper(Some(
-                        self.task.take().expect("future polled twice"))))
-                        as Box<Continuation>,
+                    task: Wrapper::wrap(
+                        self.task.take().expect("future polled twice")),
                 }));
 
             }
@@ -80,11 +94,16 @@ impl<F: Task + 'static> Future for SubscrFuture<F> {
         match self.task.as_mut().expect("future polled twice").poll() {
             TaskResult::Continue => {}
             TaskResult::Stop => return Ok(Async::Ready(FutureResult::Done)),
+            TaskResult::Restart => {
+                return Ok(Async::Ready(FutureResult::Restart {
+                    task: Wrapper::wrap(
+                        self.task.take().expect("future polled twice")),
+                }));
+            }
             TaskResult::DelayRestart => {
                 return Ok(Async::Ready(FutureResult::DelayRestart {
-                    task: Box::new(Wrapper(Some(
-                        self.task.take().expect("future polled twice"))))
-                        as Box<Continuation>,
+                    task: Wrapper::wrap(
+                        self.task.take().expect("future polled twice")),
                 }));
             }
         }
