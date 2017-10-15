@@ -17,6 +17,8 @@ use slot;
 pub trait HostResolver: Debug + 'static {
     fn resolve_host(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<IpList, Error>>);
+    fn resolve_host_port(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
+        name: Name, port: u16, tx: oneshot::Sender<Result<Address, Error>>);
 }
 
 pub trait Resolver: Debug + 'static {
@@ -62,6 +64,13 @@ impl<R: ResolveHost + Debug + 'static> HostResolver for ResolveHostWrapper<R> {
         name: Name, tx: oneshot::Sender<Result<IpList, Error>>)
     {
         let future = self.resolver.resolve_host(&name);
+        res.spawn(SendResult(name, future, Some(tx)));
+    }
+    fn resolve_host_port(&self, res: &mut ResolverFuture, _cfg: &Arc<Config>,
+        name: Name, port: u16, tx: oneshot::Sender<Result<Address, Error>>)
+    {
+        let future = self.resolver.resolve_host(&name);
+        let future = future.map(move |x| x.with_port(port));
         res.spawn(SendResult(name, future, Some(tx)));
     }
 }

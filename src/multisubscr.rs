@@ -8,12 +8,10 @@ use abstract_ns::{IpList, Address};
 use abstract_ns::addr::union;
 use futures::{Stream, Future, Async};
 use tokio_core::reactor::Timeout;
-use void::{Void, unreachable};
+use void::{unreachable};
 
 use config::Config;
 use coroutine::{ResolverFuture, get_suffix};
-use internal_traits::{Subscriber, HostSubscriber};
-use future::{AddrStream, HostStream};
 use name::InternalName;
 use slot;
 use subscr::{Task, TaskResult, SubscrFuture};

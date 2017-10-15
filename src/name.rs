@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use std::num::ParseIntError;
 
+use abstract_ns;
 use abstract_ns::name::{self, Name};
 use quick_error::ResultExt;
 
@@ -92,6 +93,25 @@ impl<'a> AutoName<'a> {
 impl<'a, T: AsRef<str> + 'a> From<&'a T> for AutoName<'a> {
     fn from(val: &'a T) -> AutoName<'a> {
         AutoName::Auto(val.as_ref())
+    }
+}
+
+impl<'a> From<&'a str> for AutoName<'a> {
+    fn from(val: &'a str) -> AutoName<'a> {
+        AutoName::Auto(val)
+    }
+}
+
+impl Into<abstract_ns::Error> for Error {
+    fn into(self) -> abstract_ns::Error {
+        match self {
+            Error::Name(name, _) => {
+                abstract_ns::Error::InvalidName(name, "bad name")
+            }
+            Error::Port(name, _) => {
+                abstract_ns::Error::InvalidName(name, "bad port number")
+            }
+        }
     }
 }
 

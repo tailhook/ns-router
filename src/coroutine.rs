@@ -121,6 +121,21 @@ impl ResolverFuture {
             fail(&name, tx, Error::NameNotFound);
         }
     }
+    fn resolve_host_port(&mut self, cfg: &Arc<Config>,
+        name: Name, port: u16, tx: oneshot::Sender<Result<Address, Error>>)
+    {
+        // need to retry resolving static host because the config might just
+        // arrived right now
+        if let Some(value) = cfg.hosts.get(&name) {
+            reply(&name, tx, value.with_port(port));
+            return;
+        }
+        if let Some(ref res) = get_suffix(cfg, name.as_ref()).host_resolver {
+            res.resolve_host_port(self, cfg, name, port, tx);
+        } else {
+            fail(&name, tx, Error::NameNotFound);
+        }
+    }
     fn resolve(&mut self, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Address, Error>>)
     {
@@ -190,6 +205,9 @@ impl Future for ResolverFuture {
                 match inp {
                     Async::Ready(Some(ResolveHost(n, tx))) => {
                         self.resolve_host(&cfg, n, tx);
+                    }
+                    Async::Ready(Some(ResolveHostPort(n, p, tx))) => {
+                        self.resolve_host_port(&cfg, n, p, tx);
                     }
                     Async::Ready(Some(Resolve(n, tx))) => {
                         self.resolve(&cfg, n, tx);

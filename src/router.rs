@@ -4,13 +4,14 @@ use std::sync::Arc;
 use futures::{Stream, Future};
 use futures::future::{empty};
 use futures::stream::{once};
+use futures::sync::oneshot;
 use internal::Table;
 use tokio_core::reactor::Handle;
 use void::Void;
 
 use config::Config;
-use future::AddrStream;
-use name::AutoName;
+use future::{AddrStream, ResolveFuture};
+use name::{AutoName, InternalName};
 use slot;
 
 
@@ -135,6 +136,33 @@ impl Router {
         }), tx);
         AddrStream(rx)
     }
+    /// Resolve a string or other things into an address
+    ///
+    /// See description of [`subscribe_many`] to find out how names are parsed
+    ///
+    /// See [`AutoName`] for supported types
+    ///
+    /// [`subscribe_many`]: #tymethod.subscribe_many
+    /// [`AutoName`]:
+    pub fn resolve_auto<'x, N: Into<AutoName<'x>>>(&self,
+        name: N, default_port: u16)
+        -> ResolveFuture
+    {
+        let (tx, rx) = oneshot::channel();
+        match name.into().parse(default_port) {
+            Ok(InternalName::HostPort(name, port)) => {
+                self.0.resolve_host_with_port(&name, port, tx)
+            }
+            Ok(InternalName::Service(name)) => {
+                self.0.resolve(&name, tx)
+            }
+            Err(e) => {
+                tx.send(Err(e.into())).ok();
+            }
+        }
+        ResolveFuture(rx)
+    }
+
 }
 
 impl UpdateSink {

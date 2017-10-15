@@ -15,11 +15,11 @@ pub struct ResolveHostFuture(oneshot::Receiver<Result<IpList, Error>>);
 
 /// A future returned from `Router::resolve`
 #[derive(Debug)]
-pub struct ResolveFuture(oneshot::Receiver<Result<Address, Error>>);
+pub struct ResolveFuture(pub(crate) oneshot::Receiver<Result<Address, Error>>);
 
 /// A stream returned from `Router::host_subscribe`
 #[derive(Debug)]
-pub struct HostStream(pub(crate) slot::Receiver<IpList>);
+pub struct HostStream(slot::Receiver<IpList>);
 
 /// A stream returned from `Router::subscribe`
 #[derive(Debug)]

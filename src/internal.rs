@@ -20,6 +20,7 @@ use subscr::{Wrapper};
 #[derive(Debug)]
 pub(crate) enum Request {
     ResolveHost(Name, oneshot::Sender<Result<IpList, Error>>),
+    ResolveHostPort(Name, u16, oneshot::Sender<Result<Address, Error>>),
     Resolve(Name, oneshot::Sender<Result<Address, Error>>),
     HostSubscribe(Name, slot::Sender<IpList>),
     Subscribe(Name, slot::Sender<Address>),
@@ -62,6 +63,30 @@ impl Table {
             Ok(()) => {}
             Err(e) => match e.into_inner() {
                 Request::ResolveHost(name, tx) => {
+                    fail(&name, tx, Error::TemporaryError(
+                        "Resolver is down".into()));
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    pub fn resolve_host_with_port(&self, name: &Name, port: u16,
+        tx: oneshot::Sender<Result<Address, Error>>)
+    {
+        // shortcut if config exists and this is an in-memory host
+        if let Some(cfg) = self.cfg.get() {
+            if let Some(value) = cfg.hosts.get(name) {
+                reply(name, tx, value.with_port(port));
+                return;
+            }
+        }
+        match self.requests.unbounded_send(
+            Request::ResolveHostPort(name.clone(), port, tx))
+        {
+            Ok(()) => {}
+            Err(e) => match e.into_inner() {
+                Request::ResolveHostPort(name, _, tx) => {
                     fail(&name, tx, Error::TemporaryError(
                         "Resolver is down".into()));
                 }
