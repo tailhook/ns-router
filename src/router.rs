@@ -154,6 +154,9 @@ impl Router {
             Ok(InternalName::Service(name)) => {
                 self.0.resolve(&name, tx)
             }
+            Ok(InternalName::Addr(addr)) => {
+                tx.send(Ok(addr.into())).ok();
+            }
             Err(e) => {
                 tx.send(Err(e.into())).ok();
             }

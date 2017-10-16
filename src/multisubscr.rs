@@ -130,6 +130,10 @@ impl<S: Stream<Item=Vec<InternalName>> + 'static> Task for MultiSubscr<S>
                     }
 
                 }
+                InternalName::Addr(addr) => {
+                        self.items.insert(name.clone(),
+                                          StaticAddr(addr.into()));
+                }
             }
         }
         if all_ok && self.current.len() > 0 {

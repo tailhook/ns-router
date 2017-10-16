@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use std::num::ParseIntError;
+use std::net::{IpAddr, SocketAddr};
 
 use abstract_ns;
 use abstract_ns::name::{self, Name};
@@ -29,6 +30,10 @@ quick_error! {
 /// * `example.org` → A record example.org, port 80
 /// * `example.org:8080` → A record example.org, port 8080
 /// * `_service._proto.example.org` → SRV record, and port from the record
+/// * `127.0.0.1` → IP used directly, port 80
+/// * `127.0.0.1:8080` → IP/port used directly
+/// * `2001:db8::2:1` → IPv6 address (note: no brackets)
+/// * `[2001:db8::2:1]:1235` → IPv6 address and port (note: square brackets)
 ///
 /// This works by wrapping the string read from configuration file into
 /// `AutoName::Auto` and using it in `Router`. You might override things
@@ -54,12 +59,17 @@ pub enum AutoName<'a> {
     HostDefaultPort(&'a str),
     /// Use service name and port resolved using SRV record or similar
     Service(&'a str),
+    /// A bare IP used directly as a host
+    IpAddr(IpAddr),
+    /// A bare socket address used directly as a service address
+    SocketAddr(SocketAddr),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub(crate) enum InternalName {
     HostPort(Name, u16),
     Service(Name),
+    Addr(SocketAddr),
 }
 
 impl<'a> AutoName<'a> {
@@ -70,7 +80,11 @@ impl<'a> AutoName<'a> {
         use self::InternalName as I;
         match *self {
             A::Auto(x) => {
-                if x.starts_with("_") {
+                if let Ok(ip) = x.parse() {
+                    Ok(I::Addr(SocketAddr::new(ip, default_port)))
+                } else if let Ok(sa) = x.parse() {
+                    Ok(I::Addr(sa))
+                } else if x.starts_with("_") {
                     Ok(I::Service(Name::from_str(x).context(x)?))
                 } else if let Some(pos) = x.find(':') {
                     Ok(I::HostPort(Name::from_str(&x[..pos]).context(x)?,
@@ -86,6 +100,8 @@ impl<'a> AutoName<'a> {
             => Ok(I::HostPort(Name::from_str(name).context(name)?, default_port)),
             A::Service(name)
             => Ok(I::Service(Name::from_str(name).context(name)?)),
+            A::IpAddr(ip) => Ok(I::Addr(SocketAddr::new(ip, default_port))),
+            A::SocketAddr(sa) => Ok(I::Addr(sa)),
         }
     }
 }
