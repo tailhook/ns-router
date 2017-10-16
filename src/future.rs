@@ -1,17 +1,19 @@
 //! Futures and streams returned from router
 //!
-use abstract_ns::{Name, IpList, Address, Error};
-use abstract_ns::{Resolve, ResolveHost, Subscribe, HostSubscribe};
+use std::sync::Arc;
+
+use abstract_ns::{IpList, Address, Error};
 use futures::sync::oneshot;
 use futures::{Future, Async, Stream};
 use void::Void;
 
 use slot;
-use router::Router;
+use config::Config;
 
 /// A future returned from `Router::resolve_host`
 #[derive(Debug)]
-pub struct ResolveHostFuture(oneshot::Receiver<Result<IpList, Error>>);
+pub struct ResolveHostFuture(
+    pub(crate) oneshot::Receiver<Result<IpList, Error>>);
 
 /// A future returned from `Router::resolve`
 #[derive(Debug)]
@@ -19,49 +21,23 @@ pub struct ResolveFuture(pub(crate) oneshot::Receiver<Result<Address, Error>>);
 
 /// A stream returned from `Router::host_subscribe`
 #[derive(Debug)]
-pub struct HostStream(slot::Receiver<IpList>);
+pub struct HostStream(pub(crate) slot::Receiver<IpList>);
 
 /// A stream returned from `Router::subscribe`
 #[derive(Debug)]
 pub struct AddrStream(pub(crate) slot::Receiver<Address>);
 
+/// A sink that updates router created using `Router::updating_config`
+#[derive(Debug)]
+pub struct UpdateSink(pub(crate) slot::Sender<Arc<Config>>);
 
-impl ResolveHost for Router {
-    type FutureHost = ResolveHostFuture;
-    fn resolve_host(&self, name: &Name) -> ResolveHostFuture {
-        let (tx, rx) = oneshot::channel();
-        self.0.resolve_host(name, tx);
-        ResolveHostFuture(rx)
-    }
-}
 
-impl Resolve for Router {
-    type Future = ResolveFuture;
-    fn resolve(&self, name: &Name) -> ResolveFuture {
-        let (tx, rx) = oneshot::channel();
-        self.0.resolve(name, tx);
-        ResolveFuture(rx)
-    }
-
-}
-
-impl HostSubscribe for Router {
-    type Error = Void;
-    type HostStream = HostStream;
-    fn subscribe_host(&self, name: &Name) -> HostStream {
-        let (tx, rx) = slot::channel();
-        self.0.subscribe_host(name, tx);
-        HostStream(rx)
-    }
-}
-
-impl Subscribe for Router {
-    type Error = Void;
-    type Stream = AddrStream;
-    fn subscribe(&self, name: &Name) -> AddrStream {
-        let (tx, rx) = slot::channel();
-        self.0.subscribe(name, tx);
-        AddrStream(rx)
+impl UpdateSink {
+    /// Update a config
+    ///
+    /// Returns `true` if send worked (meaning router is still alive).
+    pub fn update(&self, config: &Arc<Config>) -> bool {
+        self.0.swap(config.clone()).is_ok()
     }
 }
 
