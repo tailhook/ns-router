@@ -171,20 +171,22 @@ impl<S: Stream<Item=Vec<InternalName>> + 'static> Task for MultiSubscr<S>
             }
             Async::Ready(None) | Async::NotReady => {}
         }
-        match self.input.poll() {
-            Err(e) => {
-                warn!("Stream of names errored: {}", e);
-                return TaskResult::Stop;
-            }
-            Ok(Async::Ready(None)) => {
-                return TaskResult::Stop;
-            }
-            Ok(Async::NotReady) => {}
-            Ok(Async::Ready(Some(x))) => {
-                if self.current != x {
-                    self.current = x;
-                    // restart, so timer is started again
-                    return TaskResult::Restart;
+        loop {
+            match self.input.poll() {
+                Err(e) => {
+                    warn!("Stream of names errored: {}", e);
+                    return TaskResult::Stop;
+                }
+                Ok(Async::Ready(None)) => {
+                    return TaskResult::Stop;
+                }
+                Ok(Async::NotReady) => break,
+                Ok(Async::Ready(Some(x))) => {
+                    if self.current != x {
+                        self.current = x;
+                        // restart, so timer is started again
+                        return TaskResult::Restart;
+                    }
                 }
             }
         }
@@ -194,29 +196,33 @@ impl<S: Stream<Item=Vec<InternalName>> + 'static> Task for MultiSubscr<S>
                 StaticHost(_, _) => {}
                 StaticAddr(_) => {}
                 Host(ref mut s, ref mut v, _) => {
-                    match s.poll() {
-                        Err(e) => unreachable(e),
-                        Ok(Async::Ready(Some(x))) => {
-                            if Some(&x) != v.as_ref() {
-                                *v = Some(x);
-                                updated = true;
-                            }
-                        },
-                        Ok(Async::Ready(None)) => unreachable!(),
-                        Ok(Async::NotReady) => {}
+                    loop {
+                        match s.poll() {
+                            Err(e) => unreachable(e),
+                            Ok(Async::Ready(Some(x))) => {
+                                if Some(&x) != v.as_ref() {
+                                    *v = Some(x);
+                                    updated = true;
+                                }
+                            },
+                            Ok(Async::Ready(None)) => unreachable!(),
+                            Ok(Async::NotReady) => break,
+                        }
                     }
                 }
                 Addr(ref mut s, ref mut v) => {
-                    match s.poll() {
-                        Err(e) => unreachable(e),
-                        Ok(Async::Ready(Some(x))) => {
-                            if Some(&x) != v.as_ref() {
-                                *v = Some(x);
-                                updated = true;
-                            }
-                        },
-                        Ok(Async::Ready(None)) => unreachable!(),
-                        Ok(Async::NotReady) => {}
+                    loop {
+                        match s.poll() {
+                            Err(e) => unreachable(e),
+                            Ok(Async::Ready(Some(x))) => {
+                                if Some(&x) != v.as_ref() {
+                                    *v = Some(x);
+                                    updated = true;
+                                }
+                            },
+                            Ok(Async::Ready(None)) => unreachable!(),
+                            Ok(Async::NotReady) => break,
+                        }
                     }
                 }
             }
