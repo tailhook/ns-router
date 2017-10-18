@@ -39,7 +39,7 @@ fn test_host() {
 
     let cfg = Config::new()
         .set_fallthrough(IncrMock(AtomicUsize::new(1))
-            .interval_subscribe(Duration::from_millis(100), &handle))
+            .interval_subscriber(Duration::from_millis(100), &handle))
         .done();
     let router = Router::from_config(&cfg, &handle);
 
@@ -61,7 +61,7 @@ fn test_service() {
 
     let cfg = Config::new()
         .set_fallthrough(IncrMock(AtomicUsize::new(1))
-            .interval_subscribe(Duration::from_millis(100), &handle))
+            .interval_subscriber(Duration::from_millis(100), &handle))
         .done();
     let router = Router::from_config(&cfg, &handle);
 

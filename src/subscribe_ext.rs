@@ -11,7 +11,7 @@ use tokio_core::reactor::{Handle, Timeout};
 
 /// A subscriber which polls resolver at a regular interval
 ///
-/// Create the instance with `SubscribeExt::interval_subscribe`
+/// Create the instance with `SubscribeExt::interval_subscriber`
 #[derive(Debug)]
 pub struct IntervalSubscriber<R>(Rc<Internal<R>>);
 
@@ -48,13 +48,13 @@ pub struct IntervalHostResolver<R: ResolveHost> {
 pub trait SubscribeExt {
     /// Return a subscriber that uses `resolve` or `resolve_host` at a regular
     /// interval
-    fn interval_subscribe(self, interval: Duration, handle: &Handle)
+    fn interval_subscriber(self, interval: Duration, handle: &Handle)
         -> IntervalSubscriber<Self>
         where Self: Sized;
 }
 
 impl<T: Resolve + ResolveHost> SubscribeExt for T {
-    fn interval_subscribe(self, interval: Duration, handle: &Handle)
+    fn interval_subscriber(self, interval: Duration, handle: &Handle)
         -> IntervalSubscriber<Self>
         where Self: Sized
     {
