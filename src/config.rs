@@ -100,8 +100,11 @@ impl Config {
     /// Add a resolver for suffix
     ///
     /// Note: you must supply a full resolver here,
-    /// use `null_resolver`/`null_host_resolver` and `frozen_subscriber`
+    /// use `null_resolver`/`null_host_resolver` and
+    /// [`interval_subscribe`] or `frozen_subscriber`
     /// and other combinators to fullfill needed type.
+    ///
+    /// [`interval_subscribe`]: trait.SubscribeExt.html#tymethod.interval_subscribe
     pub fn add_suffix<S, R>(&mut self, suffix: S, resolver: R)
         -> &mut Self
         where S: Into<String>,

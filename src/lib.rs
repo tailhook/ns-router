@@ -20,7 +20,9 @@ mod router;
 mod slot;  // TODO(tailhook) it should be added to futures-rs
 mod subscr;
 pub mod future;
+pub mod subscribe_ext;
 
 pub use router::Router;
 pub use config::Config;
 pub use name::AutoName;
+pub use subscribe_ext::SubscribeExt;

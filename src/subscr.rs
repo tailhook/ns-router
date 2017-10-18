@@ -131,22 +131,24 @@ impl<S: Stream<Item=Address> + 'static> Task for Subscr<S>
         }
     }
     fn poll(&mut self) -> TaskResult {
-        match self.source.poll() {
-            Ok(Async::Ready(Some(x))) => {
-                if self.tx.swap(x).is_err() {
-                    return TaskResult::Stop;
+        loop {
+            match self.source.poll() {
+                Ok(Async::Ready(Some(x))) => {
+                    if self.tx.swap(x).is_err() {
+                        return TaskResult::Stop;
+                    }
                 }
+                Ok(Async::Ready(None))  => {
+                    error!("End of stream while following {:?}", self.name);
+                    return TaskResult::DelayRestart;
+                }
+                Err(e) => {
+                    error!("Error while following {:?}: {}", self.name,
+                        Into::<Error>::into(e));
+                    return TaskResult::DelayRestart;
+                }
+                Ok(Async::NotReady) => break,
             }
-            Ok(Async::Ready(None))  => {
-                error!("End of stream while following {:?}", self.name);
-                return TaskResult::DelayRestart;
-            }
-            Err(e) => {
-                error!("Error while following {:?}: {}", self.name,
-                    Into::<Error>::into(e));
-                return TaskResult::DelayRestart;
-            }
-            Ok(Async::NotReady) => {}
         }
         match self.tx.poll_cancel() {
             Ok(Async::NotReady) => {}
@@ -178,22 +180,24 @@ impl<S: Stream<Item=IpList> + 'static> Task for HostSubscr<S>
         }
     }
     fn poll(&mut self) -> TaskResult {
-        match self.source.poll() {
-            Ok(Async::Ready(Some(x))) => {
-                if self.tx.swap(x).is_err() {
-                    return TaskResult::Stop;
+        loop {
+            match self.source.poll() {
+                Ok(Async::Ready(Some(x))) => {
+                    if self.tx.swap(x).is_err() {
+                        return TaskResult::Stop;
+                    }
                 }
+                Ok(Async::Ready(None))  => {
+                    error!("End of stream while following {:?}", self.name);
+                    return TaskResult::DelayRestart;
+                }
+                Err(e) => {
+                    error!("Error while following {:?}: {}", self.name,
+                        Into::<Error>::into(e));
+                    return TaskResult::DelayRestart;
+                }
+                Ok(Async::NotReady) => break,
             }
-            Ok(Async::Ready(None))  => {
-                error!("End of stream while following {:?}", self.name);
-                return TaskResult::DelayRestart;
-            }
-            Err(e) => {
-                error!("Error while following {:?}: {}", self.name,
-                    Into::<Error>::into(e));
-                return TaskResult::DelayRestart;
-            }
-            Ok(Async::NotReady) => {}
         }
         match self.tx.poll_cancel() {
             Ok(Async::NotReady) => {}
