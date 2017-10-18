@@ -9,30 +9,23 @@ use void::Void;
 
 use config::Config;
 use coroutine::{ResolverFuture, FutureResult};
-use subscr::{SubscrFuture, HostSubscr, Subscr};
+use subscr::{SubscrFuture, HostSubscr, Subscr, NoOpSubscr, HostNoOpSubscr};
 use internal::{reply, fail};
 use slot;
 
 
-pub trait HostResolver: Debug + 'static {
+pub trait Resolver: Debug + 'static {
     fn resolve_host(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<IpList, Error>>);
     fn resolve_host_port(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
         name: Name, port: u16, tx: oneshot::Sender<Result<Address, Error>>);
-}
-
-pub trait Resolver: Debug + 'static {
     fn resolve(&self, res: &mut ResolverFuture, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Address, Error>>);
-}
-pub trait HostSubscriber: Debug + 'static {
     fn host_subscribe(&self, res: &mut ResolverFuture,
-        sub: &Arc<HostSubscriber>, cfg: &Arc<Config>,
+        sub: &Arc<Resolver>, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<IpList>);
-}
-pub trait Subscriber: Debug + 'static {
     fn subscribe(&self, res: &mut ResolverFuture,
-        sub: &Arc<Subscriber>, cfg: &Arc<Config>,
+        sub: &Arc<Resolver>, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Address>);
 }
 
@@ -40,26 +33,27 @@ struct SendResult<F: Future>(Name, F,
     Option<oneshot::Sender<Result<F::Item, Error>>>);
 
 #[derive(Debug)]
-pub struct ResolveHostWrapper<R: ResolveHost> {
+pub struct Wrapper<R> {
     resolver: R,
 }
 
 #[derive(Debug)]
-pub struct ResolveWrapper<R: Resolve> {
-    resolver: R,
+pub struct NullResolver;
+
+
+impl<R:Debug + 'static> Wrapper<R>
+    where R: Resolve + ResolveHost + Subscribe + HostSubscribe
+{
+    pub fn new(resolver: R) -> Wrapper<R> {
+        Wrapper {
+            resolver,
+        }
+    }
 }
 
-#[derive(Debug)]
-pub struct HostSubscribeWrapper<S: HostSubscribe> {
-    subscriber: S,
-}
-
-#[derive(Debug)]
-pub struct SubscribeWrapper<S: Subscribe> {
-    subscriber: S,
-}
-
-impl<R: ResolveHost + Debug + 'static> HostResolver for ResolveHostWrapper<R> {
+impl<R:Debug + 'static> Resolver for Wrapper<R>
+    where R: Resolve + ResolveHost + Subscribe + HostSubscribe
+{
     fn resolve_host(&self, res: &mut ResolverFuture, _cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<IpList, Error>>)
     {
@@ -73,54 +67,16 @@ impl<R: ResolveHost + Debug + 'static> HostResolver for ResolveHostWrapper<R> {
         let future = future.map(move |x| x.with_port(port));
         res.spawn(SendResult(name, future, Some(tx)));
     }
-}
 
-impl<R: ResolveHost + Debug + 'static> ResolveHostWrapper<R> {
-    pub fn new(resolver: R) -> ResolveHostWrapper<R> {
-        ResolveHostWrapper {
-            resolver,
-        }
-    }
-}
-
-impl<R: Resolve + Debug + 'static> Resolver for ResolveWrapper<R> {
     fn resolve(&self, res: &mut ResolverFuture, _cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Address, Error>>)
     {
         let f = self.resolver.resolve(&name);
         res.spawn(SendResult(name, f, Some(tx)));
     }
-}
 
-impl<R: Resolve + Debug + 'static> ResolveWrapper<R> {
-    pub fn new(resolver: R) -> ResolveWrapper<R> {
-        ResolveWrapper {
-            resolver,
-        }
-    }
-}
-
-impl<S: HostSubscribe + Debug + 'static> HostSubscribeWrapper<S> {
-    pub fn new(subscriber: S) -> HostSubscribeWrapper<S> {
-        HostSubscribeWrapper {
-            subscriber,
-        }
-    }
-}
-
-impl<S: Subscribe + Debug + 'static> SubscribeWrapper<S> {
-    pub fn new(subscriber: S) -> SubscribeWrapper<S> {
-        SubscribeWrapper {
-            subscriber,
-        }
-    }
-}
-
-impl<S> Subscriber for SubscribeWrapper<S>
-    where S: Subscribe + Debug + 'static,
-{
     fn subscribe(&self, res: &mut ResolverFuture,
-        sub: &Arc<Subscriber>, _cfg: &Arc<Config>,
+        sub: &Arc<Resolver>, _cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Address>)
     {
         let update_rx = res.update_rx();
@@ -128,18 +84,14 @@ impl<S> Subscriber for SubscribeWrapper<S>
             update_rx,
             task: Some(Subscr {
                 subscriber: sub.clone(),
-                source: self.subscriber.subscribe(&name),
+                source: self.resolver.subscribe(&name),
                 name, tx,
             }),
         });
     }
-}
 
-impl<S> HostSubscriber for HostSubscribeWrapper<S>
-    where S: HostSubscribe + Debug + 'static,
-{
     fn host_subscribe(&self, res: &mut ResolverFuture,
-        sub: &Arc<HostSubscriber>, _cfg: &Arc<Config>,
+        sub: &Arc<Resolver>, _cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<IpList>)
     {
         let update_rx = res.update_rx();
@@ -147,10 +99,43 @@ impl<S> HostSubscriber for HostSubscribeWrapper<S>
             update_rx,
             task: Some(HostSubscr {
                 subscriber: sub.clone(),
-                source: self.subscriber.subscribe_host(&name),
+                source: self.resolver.subscribe_host(&name),
                 name, tx,
             }),
         });
+    }
+}
+
+impl Resolver for NullResolver {
+    fn resolve_host(&self, _res: &mut ResolverFuture, _cfg: &Arc<Config>,
+        _name: Name, tx: oneshot::Sender<Result<IpList, Error>>)
+    {
+        tx.send(Err(Error::NameNotFound)).ok();
+    }
+    fn resolve_host_port(&self, _res: &mut ResolverFuture, _cfg: &Arc<Config>,
+        _name: Name, _port: u16, tx: oneshot::Sender<Result<Address, Error>>)
+    {
+        tx.send(Err(Error::NameNotFound)).ok();
+    }
+
+    fn resolve(&self, _res: &mut ResolverFuture, _cfg: &Arc<Config>,
+        _name: Name, tx: oneshot::Sender<Result<Address, Error>>)
+    {
+        tx.send(Err(Error::NameNotFound)).ok();
+    }
+
+    fn subscribe(&self, res: &mut ResolverFuture,
+        _sub: &Arc<Resolver>, _cfg: &Arc<Config>,
+        name: Name, tx: slot::Sender<Address>)
+    {
+        SubscrFuture::spawn_in(res, NoOpSubscr { name, tx });
+    }
+
+    fn host_subscribe(&self, res: &mut ResolverFuture,
+        _sub: &Arc<Resolver>, _cfg: &Arc<Config>,
+        name: Name, tx: slot::Sender<IpList>)
+    {
+        SubscrFuture::spawn_in(res, HostNoOpSubscr { name, tx });
     }
 }
 

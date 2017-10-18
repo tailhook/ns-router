@@ -8,7 +8,7 @@ use futures::future::Shared;
 use void::Void;
 
 use slot;
-use internal_traits::{HostSubscriber, Subscriber};
+use internal_traits::Resolver;
 use config::Config;
 use coroutine::{ResolverFuture, FutureResult, Continuation, get_suffix};
 
@@ -33,14 +33,14 @@ pub(crate) trait Task {
 
 pub(crate) struct Subscr<S: Stream<Item=Address>> {
     pub name: Name,
-    pub subscriber: Arc<Subscriber>,
+    pub subscriber: Arc<Resolver>,
     pub source: S,
     pub tx: slot::Sender<Address>,
 }
 
 pub(crate) struct HostSubscr<S: Stream<Item=IpList>> {
     pub name: Name,
-    pub subscriber: Arc<HostSubscriber>,
+    pub subscriber: Arc<Resolver>,
     pub source: S,
     pub tx: slot::Sender<IpList>,
 }
@@ -123,18 +123,11 @@ impl<S: Stream<Item=Address> + 'static> Task for Subscr<S>
             }
             return;
         }
-        let ref nsub = get_suffix(cfg, self.name.as_ref()).subscriber;
-        if let Some(ref sub) = *nsub {
-            if !Arc::ptr_eq(sub, &self.subscriber) {
-                sub.subscribe(res, sub, cfg, self.name, self.tx);
-            } else {
-                SubscrFuture::spawn_in(res, self)
-            }
+        let nsub = get_suffix(cfg, self.name.as_ref());
+        if !Arc::ptr_eq(nsub, &self.subscriber) {
+            nsub.subscribe(res, nsub, cfg, self.name, self.tx);
         } else {
-            // in subscription functions we don't fail, we just wait
-            // for next opportunity (configuration reload?)
-            SubscrFuture::spawn_in(res,
-                NoOpSubscr { name: self.name, tx: self.tx });
+            SubscrFuture::spawn_in(res, self)
         }
     }
     fn poll(&mut self) -> TaskResult {
@@ -177,18 +170,11 @@ impl<S: Stream<Item=IpList> + 'static> Task for HostSubscr<S>
             }
             return;
         }
-        let ref nsub = get_suffix(cfg, self.name.as_ref()).host_subscriber;
-        if let Some(ref sub) = *nsub {
-            if !Arc::ptr_eq(sub, &self.subscriber) {
-                sub.host_subscribe(res, sub, cfg, self.name, self.tx);
-            } else {
-                SubscrFuture::spawn_in(res, self)
-            }
+        let ref nsub = get_suffix(cfg, self.name.as_ref());
+        if !Arc::ptr_eq(nsub, &self.subscriber) {
+            nsub.host_subscribe(res, nsub, cfg, self.name, self.tx);
         } else {
-            // in subscription functions we don't fail, we just wait
-            // for next opportunity (configuration reload?)
-            SubscrFuture::spawn_in(res,
-                HostNoOpSubscr { name: self.name, tx: self.tx });
+            SubscrFuture::spawn_in(res, self)
         }
     }
     fn poll(&mut self) -> TaskResult {

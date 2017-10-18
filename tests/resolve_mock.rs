@@ -54,7 +54,7 @@ fn test_fallback_host() {
     let handle = core.handle();
 
     let cfg = Config::new()
-        .set_fallthrough_host_resolver(Mock)
+        .set_fallthrough(Mock.frozen_subscriber())
         .done();
     let router = Router::from_config(&cfg, &handle);
 
@@ -73,7 +73,7 @@ fn test_fallback_service() {
     let handle = core.handle();
 
     let cfg = Config::new()
-        .set_fallthrough_resolver(Mock)
+        .set_fallthrough(Mock.frozen_subscriber())
         .done();
     let router = Router::from_config(&cfg, &handle);
 
@@ -92,11 +92,9 @@ fn test_host_suffix() {
     let mut core = tokio_core::reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let mut cfg = Config::new();
-    cfg.suffix("consul")
-        .set_host_resolver(Mock2);
-    let cfg = cfg
-        .set_fallthrough_host_resolver(Mock)
+    let cfg = Config::new()
+        .add_suffix("consul", Mock2.frozen_subscriber())
+        .set_fallthrough(Mock.frozen_subscriber())
         .done();
     let router = Router::from_config(&cfg, &handle);
 
@@ -119,11 +117,9 @@ fn test_suffix() {
     let mut core = tokio_core::reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let mut cfg = Config::new();
-    cfg.suffix("consul")
-        .set_resolver(Mock2);
-    let cfg = cfg
-        .set_fallthrough_resolver(Mock)
+    let cfg = Config::new()
+        .add_suffix("consul", Mock2.frozen_subscriber())
+        .set_fallthrough(Mock.frozen_subscriber())
         .done();
     let router = Router::from_config(&cfg, &handle);
 

@@ -11,8 +11,9 @@ use futures::{Stream, Future, Async};
 use tokio_core::reactor::{Handle, Timeout};
 use void::{Void, unreachable};
 
-use config::{Config, Suffix};
-use internal::{Table, Request, reply, fail};
+use config::Config;
+use internal_traits::Resolver;
+use internal::{Table, Request, reply};
 use slot;
 use subscr::{SubscrFuture, HostNoOpSubscr, NoOpSubscr};
 
@@ -87,7 +88,7 @@ impl ResolverFuture {
     }
 }
 
-pub(crate) fn get_suffix<'x>(cfg: &'x Arc<Config>, name: &str) -> &'x Suffix {
+pub(crate) fn get_suffix<'x>(cfg: &'x Arc<Config>, name: &str) -> &'x Arc<Resolver> {
     if let Some(ref suf) = cfg.suffixes.get(name) {
         return suf;
     }
@@ -115,11 +116,7 @@ impl ResolverFuture {
             reply(&name, tx, value.clone());
             return;
         }
-        if let Some(ref res) = get_suffix(cfg, name.as_ref()).host_resolver {
-            res.resolve_host(self, cfg, name, tx);
-        } else {
-            fail(&name, tx, Error::NameNotFound);
-        }
+        get_suffix(cfg, name.as_ref()).resolve_host(self, cfg, name, tx);
     }
     fn resolve_host_port(&mut self, cfg: &Arc<Config>,
         name: Name, port: u16, tx: oneshot::Sender<Result<Address, Error>>)
@@ -130,11 +127,8 @@ impl ResolverFuture {
             reply(&name, tx, value.with_port(port));
             return;
         }
-        if let Some(ref res) = get_suffix(cfg, name.as_ref()).host_resolver {
-            res.resolve_host_port(self, cfg, name, port, tx);
-        } else {
-            fail(&name, tx, Error::NameNotFound);
-        }
+        get_suffix(cfg, name.as_ref())
+            .resolve_host_port(self, cfg, name, port, tx);
     }
     fn resolve(&mut self, cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<Address, Error>>)
@@ -145,11 +139,7 @@ impl ResolverFuture {
             reply(&name, tx, value.clone());
             return;
         }
-        if let Some(ref res) = get_suffix(cfg, name.as_ref()).resolver {
-            res.resolve(self, cfg, name, tx);
-        } else {
-            fail(&name, tx, Error::NameNotFound);
-        }
+        get_suffix(cfg, name.as_ref()).resolve(self, cfg, name, tx);
     }
     pub fn host_subscribe(&mut self, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<IpList>)
@@ -161,13 +151,8 @@ impl ResolverFuture {
             }
             return;
         }
-        if let Some(ref sub) = get_suffix(cfg, name.as_ref()).host_subscriber {
-            sub.host_subscribe(self, sub, cfg, name, tx);
-        } else {
-            // in subscription functions we don't fail, we just wait
-            // for next opportunity (configuration reload?)
-            SubscrFuture::spawn_in(self, HostNoOpSubscr { name, tx });
-        }
+        let sub = get_suffix(cfg, name.as_ref());
+        sub.host_subscribe(self, sub, cfg, name, tx);
     }
     pub fn subscribe(&mut self, cfg: &Arc<Config>,
         name: Name, tx: slot::Sender<Address>)
@@ -179,13 +164,8 @@ impl ResolverFuture {
             }
             return;
         }
-        if let Some(ref sub) = get_suffix(cfg, name.as_ref()).subscriber {
-            sub.subscribe(self, sub, cfg, name, tx);
-        } else {
-            // in subscription functions we don't fail, we just wait
-            // for next opportunity (configuration reload?)
-            SubscrFuture::spawn_in(self, NoOpSubscr { name, tx });
-        }
+        let sub = get_suffix(cfg, name.as_ref());
+        sub.subscribe(self, sub, cfg, name, tx);
     }
 }
 

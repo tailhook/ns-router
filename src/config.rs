@@ -5,9 +5,7 @@ use std::time::Duration;
 
 use abstract_ns::{Name, Address, IpList};
 use abstract_ns::{ResolveHost, Resolve, HostSubscribe, Subscribe};
-use internal_traits::{HostSubscribeWrapper, SubscribeWrapper};
-use internal_traits::{ResolveHostWrapper, ResolveWrapper};
-use internal_traits::{Resolver, HostResolver, Subscriber, HostSubscriber};
+use internal_traits::{Resolver, Wrapper, NullResolver};
 
 
 /// Configuration of the router
@@ -20,17 +18,8 @@ pub struct Config {
     pub(crate) convergence_delay: Duration,
     pub(crate) hosts: HashMap<Name, IpList>,
     pub(crate) services: HashMap<Name, Address>,
-    pub(crate) suffixes: HashMap<String, Suffix>,
-    pub(crate) root: Suffix,
-}
-
-/// Represents configuration of resolvers for a suffix
-#[derive(Clone, Debug)]
-pub struct Suffix {
-    pub(crate) host_resolver: Option<Arc<HostResolver>>,
-    pub(crate) resolver: Option<Arc<Resolver>>,
-    pub(crate) host_subscriber: Option<Arc<HostSubscriber>>,
-    pub(crate) subscriber: Option<Arc<Subscriber>>,
+    pub(crate) suffixes: HashMap<String, Arc<Resolver>>,
+    pub(crate) root: Arc<Resolver>,
 }
 
 impl Config {
@@ -43,12 +32,7 @@ impl Config {
             hosts: HashMap::new(),
             services: HashMap::new(),
             suffixes: HashMap::new(),
-            root: Suffix {
-                host_resolver: None,
-                resolver: None,
-                host_subscriber: None,
-                subscriber: None,
-            },
+            root: Arc::new(NullResolver),
         }
     }
 
@@ -113,27 +97,20 @@ impl Config {
         self
     }
 
-    /// Adds or returns configured suffix
+    /// Add a resolver for suffix
     ///
-    /// Then you can add suffix-specific resolvers and host-resolvers.
-    ///
-    /// Note: `add_host` and `add_service` override addresses for specific
-    /// hostnames even inside the configured suffix.
-    ///
-    /// Note: adding a suffix immediately disables fallthrough of the names
-    /// matching the suffix to a fallback resolvers. Even if no
-    /// resolvers/subscribers are added to the suffix. Use `remove_suffix` or
-    /// duplicate fallthrough resolvers here if needed.
-    pub fn suffix<S>(&mut self, suffix: S)
-        -> &mut Suffix
+    /// Note: you must supply a full resolver here,
+    /// use `null_resolver`/`null_host_resolver` and `frozen_subscriber`
+    /// and other combinators to fullfill needed type.
+    pub fn add_suffix<S, R>(&mut self, suffix: S, resolver: R)
+        -> &mut Self
         where S: Into<String>,
+              R: Resolve + ResolveHost + Subscribe + HostSubscribe,
+              R: Debug + 'static,
     {
-        self.suffixes.entry(suffix.into()).or_insert_with(|| Suffix {
-            host_resolver: None,
-            resolver: None,
-            host_subscriber: None,
-            subscriber: None,
-        })
+        self.suffixes.insert(suffix.into(),
+            Arc::new(Wrapper::new(resolver)));
+        self
     }
 
     /// Removes already configured suffix
@@ -145,89 +122,17 @@ impl Config {
     }
 
     /// Adds a host resolver used whenever no suffix matches
-    pub fn set_fallthrough_host_resolver<R>(&mut self, resolver: R)
+    pub fn set_fallthrough<R>(&mut self, resolver: R)
         -> &mut Self
-        where R: ResolveHost + Debug + 'static
+        where R: Resolve + ResolveHost + Subscribe + HostSubscribe,
+              R: Debug + 'static,
     {
-        self.root.host_resolver = Some(Arc::new(
-            ResolveHostWrapper::new(resolver)));
-        self
-    }
-
-    /// Adds a resolver used whenever no suffix matches
-    pub fn set_fallthrough_resolver<R>(&mut self, resolver: R)
-        -> &mut Self
-        where R: Resolve + Debug + 'static
-    {
-        self.root.resolver = Some(Arc::new(
-            ResolveWrapper::new(resolver)));
-        self
-    }
-
-    /// Sets a host subscriber used whenever no suffix matches
-    pub fn set_fallthrough_host_subscriber<S>(&mut self, subscriber: S)
-        -> &mut Self
-        where S: HostSubscribe + Debug + 'static
-    {
-        self.root.host_subscriber = Some(Arc::new(
-            HostSubscribeWrapper::new(subscriber)));
-        self
-    }
-
-    /// Sets a subscriber used whenever no suffix matches
-    pub fn set_fallthrough_subscriber<S>(&mut self, subscriber: S)
-        -> &mut Self
-        where S: Subscribe + Debug + 'static
-    {
-        self.root.subscriber = Some(Arc::new(
-            SubscribeWrapper::new(subscriber)));
+        self.root = Arc::new(Wrapper::new(resolver));
         self
     }
 
     /// A convenience method that returns Arc'd config
     pub fn done(&self) -> Arc<Config> {
         Arc::new(self.clone())
-    }
-}
-
-impl Suffix {
-    /// Sets a host resolver for this suffix
-    pub fn set_host_resolver<R>(&mut self, resolver: R)
-        -> &mut Self
-        where R: ResolveHost + Debug + 'static
-    {
-        self.host_resolver = Some(Arc::new(
-            ResolveHostWrapper::new(resolver)));
-        self
-    }
-
-    /// Sets a resolver for this suffix
-    pub fn set_resolver<R>(&mut self, resolver: R)
-        -> &mut Self
-        where R: Resolve + Debug + 'static
-    {
-        self.resolver = Some(Arc::new(
-            ResolveWrapper::new(resolver)));
-        self
-    }
-
-    /// Sets a host subscriber for this suffix
-    pub fn set_host_subscriber<S>(&mut self, subscriber: S)
-        -> &mut Self
-        where S: HostSubscribe + Debug + 'static
-    {
-        self.host_subscriber = Some(Arc::new(
-            HostSubscribeWrapper::new(subscriber)));
-        self
-    }
-
-    /// Sets a subscriber for this suffix
-    pub fn set_subscriber<S>(&mut self, subscriber: S)
-        -> &mut Self
-        where S: Subscribe + Debug + 'static
-    {
-        self.subscriber = Some(Arc::new(
-            SubscribeWrapper::new(subscriber)));
-        self
     }
 }

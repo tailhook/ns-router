@@ -8,14 +8,29 @@ use std::time::Duration;
 
 use futures::{lazy};
 use futures::future::{Future, Empty, IntoStream, empty};
+use futures::future::{FutureResult, ok};
 use futures::stream::{once, Stream, Chain, Once};
 use abstract_ns::{HostSubscribe, Subscribe, Name, Address, IpList, Error};
+use abstract_ns::{Resolve, ResolveHost};
 use ns_router::{Config, Router};
 
 
 #[derive(Debug)]
 struct Mock;
 
+impl ResolveHost for Mock {
+    type FutureHost = FutureResult<IpList, Error>;
+    fn resolve_host(&self, _name: &Name) -> Self::FutureHost {
+        ok(vec!["127.0.0.1".parse().unwrap()].into())
+    }
+}
+
+impl Resolve for Mock {
+    type Future = FutureResult<Address, Error>;
+    fn resolve(&self, _name: &Name) -> Self::Future {
+        ok(["127.0.0.1:443".parse().unwrap()][..].into())
+    }
+}
 
 impl HostSubscribe for Mock {
     type HostStream = Chain<Once<IpList, Error>,
@@ -109,7 +124,7 @@ fn test_fallback_host() {
     let handle = core.handle();
 
     let cfg = Config::new()
-        .set_fallthrough_host_subscriber(Mock)
+        .set_fallthrough(Mock)
         .done();
     let router = Router::from_config(&cfg, &handle);
 
@@ -130,7 +145,7 @@ fn test_override_after_fallback_host() {
     let handle = core.handle();
 
     let cfg = Config::new()
-        .set_fallthrough_host_subscriber(Mock)
+        .set_fallthrough(Mock)
         .done();
     let (router, up) = Router::updating_config(&cfg.done(), &handle);
 
@@ -158,7 +173,7 @@ fn test_add_and_override_fallback_service() {
     let handle = core.handle();
 
     let mut cfg = Config::new();
-    cfg.set_fallthrough_subscriber(Mock);
+    cfg.set_fallthrough(Mock);
     let (router, up) = Router::updating_config(&cfg.done(), &handle);
 
     let res = core.run(lazy(|| {

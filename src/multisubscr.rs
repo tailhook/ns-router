@@ -108,9 +108,8 @@ impl<S: Stream<Item=Vec<InternalName>> + 'static> Task for MultiSubscr<S>
                     if let Some(value) = cfg.hosts.get(&host) {
                         self.items.insert(name.clone(),
                             StaticHost(value.clone(), port));
-                    } else if let Some(ref sub) =
-                        get_suffix(cfg, host.as_ref()).host_subscriber
-                    {
+                    } else {
+                        let sub = get_suffix(cfg, host.as_ref());
                         let (tx, rx) = slot::channel();
                         sub.host_subscribe(res, sub, cfg, host.clone(), tx);
                         self.items.insert(name.clone(),
@@ -121,9 +120,8 @@ impl<S: Stream<Item=Vec<InternalName>> + 'static> Task for MultiSubscr<S>
                     if let Some(value) = cfg.services.get(&service) {
                         self.items.insert(name.clone(),
                                           StaticAddr(value.clone()));
-                    } else if let Some(ref sub) =
-                        get_suffix(cfg, service.as_ref()).subscriber
-                    {
+                    } else {
+                        let sub = get_suffix(cfg, service.as_ref());
                         let (tx, rx) = slot::channel();
                         sub.subscribe(res, sub, cfg, service.clone(), tx);
                         self.items.insert(name.clone(), Addr(rx, None));
