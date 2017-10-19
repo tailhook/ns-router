@@ -3,11 +3,10 @@ extern crate futures;
 extern crate ns_router;
 extern crate tokio_core;
 
-use std::net::{IpAddr, SocketAddr};
+use std::net::{SocketAddr};
 use std::time::Duration;
 
-use futures::Future;
-use abstract_ns::{HostResolve, Resolve};
+use abstract_ns::{HostResolve, Resolve, Address, IpList};
 use ns_router::{Config, Router};
 
 
@@ -23,13 +22,9 @@ fn test_host() {
         .done();
     let router = Router::from_config(&cfg, &handle);
 
-    // Read first config from a stream
-    core.turn(Some(Duration::new(0, 0)));
-
+    let res = core.run(router.resolve_host(&"localhost".parse().unwrap()));
     // Then can query cached hosts immediately
-    assert_eq!(
-        router.resolve_host(&"localhost".parse().unwrap()).wait().unwrap(),
-        vec!["127.0.0.1".parse::<IpAddr>().unwrap()].into());
+    assert_eq!(res.unwrap(), IpList::parse_list(&["127.0.0.1"]).unwrap());
 }
 
 #[test]
@@ -42,15 +37,11 @@ fn test_addr() {
                   ["127.0.0.1:80".parse::<SocketAddr>().unwrap()][..].into())
         .done();
     let router = Router::from_config(&cfg, &handle);
-
-    // Read first config from a stream
-    core.turn(Some(Duration::new(0, 0)));
+    let res = core.run(
+        router.resolve(&"_http._tcp.localhost".parse().unwrap())).unwrap();
 
     // Then can query cached hosts immediately
-    assert_eq!(
-        router.resolve(&"_http._tcp.localhost".parse().unwrap())
-            .wait().unwrap(),
-        ["127.0.0.1:80".parse::<SocketAddr>().unwrap()][..].into());
+    assert_eq!(res, Address::parse_list(&["127.0.0.1:80"]).unwrap());
 }
 
 #[test]
@@ -66,18 +57,15 @@ fn test_auto() {
         .done();
     let router = Router::from_config(&cfg, &handle);
 
-    // Read first config from a stream
-    core.turn(Some(Duration::new(0, 0)));
-
     // Then can query cached hosts immediately
     assert_eq!(
-        router.resolve_auto("localhost:1234", 80).wait().unwrap(),
+        core.run(router.resolve_auto("localhost:1234", 80)).unwrap(),
         ["127.0.0.1:1234".parse::<SocketAddr>().unwrap()][..].into());
     assert_eq!(
-        router.resolve_auto("localhost", 80).wait().unwrap(),
+        core.run(router.resolve_auto("localhost", 80)).unwrap(),
         ["127.0.0.1:80".parse::<SocketAddr>().unwrap()][..].into());
     assert_eq!(
-        router.resolve_auto("_test._tcp.localhost", 80).wait().unwrap(),
+        core.run(router.resolve_auto("_test._tcp.localhost", 80)).unwrap(),
         ["127.0.0.1:8439".parse::<SocketAddr>().unwrap()][..].into());
 }
 
@@ -94,15 +82,15 @@ fn test_straw_addresses() {
 
     // Then can query cached hosts immediately
     assert_eq!(
-        router.resolve_auto("127.0.0.1:1234", 80).wait().unwrap(),
+        core.run(router.resolve_auto("127.0.0.1:1234", 80)).unwrap(),
         ["127.0.0.1:1234".parse::<SocketAddr>().unwrap()][..].into());
     assert_eq!(
-        router.resolve_auto("127.0.0.1", 80).wait().unwrap(),
+        core.run(router.resolve_auto("127.0.0.1", 80)).unwrap(),
         ["127.0.0.1:80".parse::<SocketAddr>().unwrap()][..].into());
     assert_eq!(
-        router.resolve_auto("[2001:db8::2:1]:8123", 80).wait().unwrap(),
+        core.run(router.resolve_auto("[2001:db8::2:1]:8123", 80)).unwrap(),
         ["[2001:db8::2:1]:8123".parse::<SocketAddr>().unwrap()][..].into());
     assert_eq!(
-        router.resolve_auto("2001:db8::2:1", 80).wait().unwrap(),
+        core.run(router.resolve_auto("2001:db8::2:1", 80)).unwrap(),
         ["[2001:db8::2:1]:80".parse::<SocketAddr>().unwrap()][..].into());
 }

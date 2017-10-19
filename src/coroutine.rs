@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc};
 use std::mem;
 
 use abstract_ns::{Address, IpList, Name, Error};
@@ -13,7 +13,7 @@ use void::{Void, unreachable};
 
 use config::Config;
 use internal_traits::Resolver;
-use internal::{Table, Request, reply};
+use internal::{Request, reply};
 use slot;
 use subscr::{SubscrFuture, HostNoOpSubscr, NoOpSubscr};
 
@@ -23,7 +23,7 @@ pub struct ResolverFuture {
     update_rx: Shared<oneshot::Receiver<()>>,
     requests: UnboundedReceiver<Request>,
     futures: FuturesUnordered<Box<Future<Item=FutureResult, Error=Void>>>,
-    table: Weak<Table>,
+    current_config: Option<Arc<Config>>,
     handle: Handle,
 }
 
@@ -62,7 +62,7 @@ fn mapper<S>(res: Result<(Option<Arc<Config>>, S), (Void, S)>)
 
 impl ResolverFuture {
     pub(crate) fn new<S>(config: S, requests: UnboundedReceiver<Request>,
-        table: &Arc<Table>, handle: &Handle)
+        handle: &Handle)
         -> ResolverFuture
         where S: Stream<Item=Arc<Config>, Error=Void> + 'static
     {
@@ -76,8 +76,8 @@ impl ResolverFuture {
             update_tx: tx,
             update_rx: rx.shared(),
             futures: futures,
-            table: Arc::downgrade(table),
             handle: handle.clone(),
+            current_config: None,
         }
     }
     pub fn update_rx(&self) -> Shared<oneshot::Receiver<()>> {
@@ -174,11 +174,7 @@ impl Future for ResolverFuture {
     type Error = ();
     fn poll(&mut self) -> Result<Async<()>, ()> {
         use internal::Request::*;
-        let table = match self.table.upgrade() {
-            Some(x) => x,
-            None => return Ok(Async::Ready(())),
-        };
-        if let Some(mut cfg) = table.cfg.get() {
+        if let Some(mut cfg) = self.current_config.clone() {
             loop {
                 let inp = self.requests.poll()
                     .map_err(|_| error!("Router input stream is failed"))?;
@@ -216,7 +212,7 @@ impl Future for ResolverFuture {
                     Done => {}
                     Stop => return Ok(Async::Ready(())),
                     UpdateConfig { cfg: new_cfg, next } => {
-                        table.cfg.put(&new_cfg);
+                        self.current_config = Some(new_cfg.clone());
                         cfg = new_cfg;
                         let (tx, rx) = oneshot::channel();
                         let tx = mem::replace(&mut self.update_tx, tx);
@@ -244,7 +240,7 @@ impl Future for ResolverFuture {
                     Done => {}
                     Stop => return Ok(Async::Ready(())),
                     UpdateConfig { cfg, next } => {
-                        table.cfg.put(&cfg);
+                        self.current_config = Some(cfg);
                         let (tx, rx) = oneshot::channel();
                         let tx = mem::replace(&mut self.update_tx, tx);
                         self.update_rx = rx.shared();

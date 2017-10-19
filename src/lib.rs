@@ -9,7 +9,6 @@ extern crate void;
 #[macro_use] extern crate log;
 #[macro_use] extern crate quick_error;
 
-mod cell;
 mod config;
 mod coroutine;
 mod internal;

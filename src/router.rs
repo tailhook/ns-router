@@ -2,20 +2,24 @@ use std::fmt;
 use std::sync::Arc;
 
 use abstract_ns::{Name, Resolve, HostResolve, Subscribe, HostSubscribe};
+use abstract_ns::{Address, Error};
 use futures::{Stream, Future};
 use futures::future::{empty};
 use futures::stream::{once};
 use futures::sync::oneshot;
-use internal::Table;
+use futures::sync::mpsc::{unbounded, UnboundedSender};
 use tokio_core::reactor::Handle;
 use void::Void;
 
 use config::Config;
+use coroutine::{ResolverFuture};
 use future::{AddrStream, ResolveFuture, HostStream, ResolveHostFuture};
 use future::{UpdateSink};
+use internal::{fail, Request};
+use multisubscr::MultiSubscr;
 use name::{AutoName, InternalName};
 use slot;
-
+use subscr::Wrapper;
 
 /// An actual router class
 ///
@@ -23,16 +27,22 @@ use slot;
 /// and subscriptions are canceled. We'll probably do the same when all
 /// router instances are dropped too.
 #[derive(Debug, Clone)]
-pub struct Router(pub(crate) Arc<Table>);
+pub struct Router {
+    requests: UnboundedSender<Request>,
+}
 
 
 impl Router {
 
     /// Create a router for a static config
     pub fn from_config(config: &Arc<Config>, handle: &Handle) -> Router {
-        Router(Table::new(
+        let (tx, rx) = unbounded();
+        handle.spawn(ResolverFuture::new(
             once(Ok(config.clone())).chain(empty().into_stream()),
-            handle))
+            rx, &handle));
+        Router {
+            requests: tx,
+        }
     }
 
     /// Create a router with updating config
@@ -46,7 +56,11 @@ impl Router {
     pub fn from_stream<S>(stream: S, handle: &Handle) -> Router
         where S: Stream<Item=Arc<Config>, Error=Void> + 'static
     {
-        Router(Table::new(stream, handle))
+        let (tx, rx) = unbounded();
+        handle.spawn(ResolverFuture::new(stream, rx, &handle));
+        Router {
+            requests: tx,
+        }
     }
 
     /// Create a router and update channel
@@ -56,10 +70,31 @@ impl Router {
     pub fn updating_config(config: &Arc<Config>, handle: &Handle)
         -> (Router, UpdateSink)
     {
-        let (tx, rx) = slot::channel();
-        let stream = once(Ok(config.clone())).chain(rx)
+        let (ctx, crx) = slot::channel();
+        let stream = once(Ok(config.clone())).chain(crx)
             .map_err(|_| unreachable!());
-        return (Router(Table::new(stream, handle)), UpdateSink(tx));
+        let (tx, rx) = unbounded();
+        handle.spawn(ResolverFuture::new(stream, rx, &handle));
+        return (
+            Router {
+                requests: tx,
+            },
+            UpdateSink(ctx),
+        );
+    }
+
+    pub(crate) fn subscribe_stream<S>(&self,
+        stream: S, tx: slot::Sender<Address>)
+        where S: Stream<Item=Vec<InternalName>> + 'static,
+              S::Error: fmt::Display,
+    {
+        self.requests.unbounded_send(
+            Request::Task(Wrapper::wrap(MultiSubscr::new(stream, tx))))
+            // can't do anything when resolver is down, (no error in stream)
+            // but this will shut down stream which will be visible
+            // for the appplication, which is probably shutting down anyway
+            .map_err(|_| debug!("Stream subscription when resolver is down"))
+            .ok();
     }
 
     /// Subscribes to a list of names
@@ -92,9 +127,8 @@ impl Router {
                 }
             }
         }
-        self.0.subscribe_stream(
-            once(Ok::<_, Void>(lst)).chain(empty().into_stream()),
-            tx);
+        self.subscribe_stream(
+            once(Ok::<_, Void>(lst)).chain(empty().into_stream()), tx);
         AddrStream(rx)
     }
 
@@ -120,7 +154,7 @@ impl Router {
               <S::Item as IntoIterator>::Item: Into<AutoName<'x>>,
     {
         let (tx, rx) = slot::channel();
-        self.0.subscribe_stream(stream.map(move |iter| {
+        self.subscribe_stream(stream.map(move |iter| {
             let mut lst = Vec::new();
             for addr in iter {
                 match addr.into().parse(default_port) {
@@ -149,10 +183,32 @@ impl Router {
         let (tx, rx) = oneshot::channel();
         match name.into().parse(default_port) {
             Ok(InternalName::HostPort(name, port)) => {
-                self.0.resolve_host_with_port(&name, port, tx)
+                match self.requests.unbounded_send(
+                    Request::ResolveHostPort(name.clone(), port, tx))
+                {
+                    Ok(()) => {}
+                    Err(e) => match e.into_inner() {
+                        Request::ResolveHostPort(name, _, tx) => {
+                            fail(&name, tx, Error::TemporaryError(
+                                "Resolver is down".into()));
+                        }
+                        _ => unreachable!(),
+                    }
+                }
             }
             Ok(InternalName::Service(name)) => {
-                self.0.resolve(&name, tx)
+                match self.requests.unbounded_send(
+                    Request::Resolve(name.clone(), tx))
+                {
+                    Ok(()) => {}
+                    Err(e) => match e.into_inner() {
+                        Request::Resolve(name, tx) => {
+                            fail(&name, tx, Error::TemporaryError(
+                                "Resolver is down".into()));
+                        }
+                        _ => unreachable!(),
+                    }
+                }
             }
             Ok(InternalName::Addr(addr)) => {
                 tx.send(Ok(addr.into())).ok();
@@ -170,7 +226,18 @@ impl HostResolve for Router {
     type HostFuture = ResolveHostFuture;
     fn resolve_host(&self, name: &Name) -> ResolveHostFuture {
         let (tx, rx) = oneshot::channel();
-        self.0.resolve_host(name, tx);
+        match self.requests.unbounded_send(
+            Request::ResolveHost(name.clone(), tx))
+        {
+            Ok(()) => {}
+            Err(e) => match e.into_inner() {
+                Request::ResolveHost(name, tx) => {
+                    fail(&name, tx, Error::TemporaryError(
+                        "Resolver is down".into()));
+                }
+                _ => unreachable!(),
+            }
+        }
         ResolveHostFuture(rx)
     }
 }
@@ -179,7 +246,18 @@ impl Resolve for Router {
     type Future = ResolveFuture;
     fn resolve(&self, name: &Name) -> ResolveFuture {
         let (tx, rx) = oneshot::channel();
-        self.0.resolve(name, tx);
+        match self.requests.unbounded_send(
+            Request::Resolve(name.clone(), tx))
+        {
+            Ok(()) => {}
+            Err(e) => match e.into_inner() {
+                Request::Resolve(name, tx) => {
+                    fail(&name, tx, Error::TemporaryError(
+                        "Resolver is down".into()));
+                }
+                _ => unreachable!(),
+            }
+        }
         ResolveFuture(rx)
     }
 
@@ -190,7 +268,14 @@ impl HostSubscribe for Router {
     type HostStream = HostStream;
     fn subscribe_host(&self, name: &Name) -> HostStream {
         let (tx, rx) = slot::channel();
-        self.0.subscribe_host(name, tx);
+        self.requests.unbounded_send(
+            Request::HostSubscribe(name.clone(), tx))
+            // can't do anything when resolver is down, (no error in stream)
+            // but this will shut down stream which will be visible
+            // for the appplication, which is probably shutting down anyway
+            .map_err(|_| debug!("Subscription for {} when resolver is down",
+                name))
+            .ok();
         HostStream(rx)
     }
 }
@@ -200,7 +285,14 @@ impl Subscribe for Router {
     type Stream = AddrStream;
     fn subscribe(&self, name: &Name) -> AddrStream {
         let (tx, rx) = slot::channel();
-        self.0.subscribe(name, tx);
+        self.requests.unbounded_send(
+            Request::Subscribe(name.clone(), tx))
+            // can't do anything when resolver is down, (no error in stream)
+            // but this will shut down stream which will be visible
+            // for the appplication, which is probably shutting down anyway
+            .map_err(|_| debug!("Subscription for {} when resolver is down",
+                name))
+            .ok();
         AddrStream(rx)
     }
 }
