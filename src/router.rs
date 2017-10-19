@@ -1,7 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use abstract_ns::{Name, Resolve, ResolveHost, Subscribe, HostSubscribe};
+use abstract_ns::{Name, Resolve, HostResolve, Subscribe, HostSubscribe};
 use futures::{Stream, Future};
 use futures::future::{empty};
 use futures::stream::{once};
@@ -166,8 +166,8 @@ impl Router {
 
 }
 
-impl ResolveHost for Router {
-    type FutureHost = ResolveHostFuture;
+impl HostResolve for Router {
+    type HostFuture = ResolveHostFuture;
     fn resolve_host(&self, name: &Name) -> ResolveHostFuture {
         let (tx, rx) = oneshot::channel();
         self.0.resolve_host(name, tx);
@@ -186,7 +186,7 @@ impl Resolve for Router {
 }
 
 impl HostSubscribe for Router {
-    type Error = Void;
+    type HostError = Void;
     type HostStream = HostStream;
     fn subscribe_host(&self, name: &Name) -> HostStream {
         let (tx, rx) = slot::channel();

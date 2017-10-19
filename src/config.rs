@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use abstract_ns::{Name, Address, IpList};
-use abstract_ns::{ResolveHost, Resolve, HostSubscribe, Subscribe};
+use abstract_ns::{HostResolve, Resolve, HostSubscribe, Subscribe};
 use internal_traits::{Resolver, Wrapper, NullResolver};
 
 
@@ -108,7 +108,7 @@ impl Config {
     pub fn add_suffix<S, R>(&mut self, suffix: S, resolver: R)
         -> &mut Self
         where S: Into<String>,
-              R: Resolve + ResolveHost + Subscribe + HostSubscribe,
+              R: Resolve + HostResolve + Subscribe + HostSubscribe,
               R: Debug + 'static,
     {
         self.suffixes.insert(suffix.into(),
@@ -127,7 +127,7 @@ impl Config {
     /// Adds a host resolver used whenever no suffix matches
     pub fn set_fallthrough<R>(&mut self, resolver: R)
         -> &mut Self
-        where R: Resolve + ResolveHost + Subscribe + HostSubscribe,
+        where R: Resolve + HostResolve + Subscribe + HostSubscribe,
               R: Debug + 'static,
     {
         self.root = Arc::new(Wrapper::new(resolver));

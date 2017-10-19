@@ -3,7 +3,7 @@ use std::fmt;
 use std::time::Duration;
 use std::rc::Rc;
 
-use abstract_ns::{Resolve, ResolveHost, Subscribe, HostSubscribe, Name};
+use abstract_ns::{Resolve, HostResolve, Subscribe, HostSubscribe, Name};
 use abstract_ns::{Address, IpList};
 use futures::{Future, Stream, Async};
 use tokio_core::reactor::{Handle, Timeout};
@@ -36,11 +36,11 @@ pub struct IntervalResolver<R: Resolve> {
 }
 
 /// A stream returned by IntervalSubscriber::subscribe_host
-pub struct IntervalHostResolver<R: ResolveHost> {
+pub struct IntervalHostResolver<R: HostResolve> {
     internal: Rc<Internal<R>>,
     name: Name,
     last_value: Option<IpList>,
-    state: State<R::FutureHost>,
+    state: State<R::HostFuture>,
 }
 
 /// An extension trait for resolver
@@ -53,7 +53,7 @@ pub trait SubscribeExt {
         where Self: Sized;
 }
 
-impl<T: Resolve + ResolveHost> SubscribeExt for T {
+impl<T: Resolve + HostResolve> SubscribeExt for T {
     fn interval_subscriber(self, interval: Duration, handle: &Handle)
         -> IntervalSubscriber<Self>
         where Self: Sized
@@ -73,9 +73,9 @@ impl<T: Resolve> Resolve for IntervalSubscriber<T> {
     }
 }
 
-impl<T: ResolveHost> ResolveHost for IntervalSubscriber<T> {
-    type FutureHost = T::FutureHost;
-    fn resolve_host(&self, name: &Name) -> Self::FutureHost {
+impl<T: HostResolve> HostResolve for IntervalSubscriber<T> {
+    type HostFuture = T::HostFuture;
+    fn resolve_host(&self, name: &Name) -> Self::HostFuture {
         self.0.resolver.resolve_host(name)
     }
 }
@@ -93,8 +93,8 @@ impl<T: Resolve> Subscribe for IntervalSubscriber<T> {
     }
 }
 
-impl<T: ResolveHost> HostSubscribe for IntervalSubscriber<T> {
-    type Error = <T::FutureHost as Future>::Error;
+impl<T: HostResolve> HostSubscribe for IntervalSubscriber<T> {
+    type HostError = <T::HostFuture as Future>::Error;
     type HostStream = IntervalHostResolver<T>;
     fn subscribe_host(&self, name: &Name) -> Self::HostStream {
         IntervalHostResolver {
@@ -107,9 +107,9 @@ impl<T: ResolveHost> HostSubscribe for IntervalSubscriber<T> {
 }
 
 
-impl<R: ResolveHost> Stream for IntervalHostResolver<R> {
+impl<R: HostResolve> Stream for IntervalHostResolver<R> {
     type Item = IpList;
-    type Error = <R::FutureHost as Future>::Error;
+    type Error = <R::HostFuture as Future>::Error;
     fn poll(&mut self) -> Result<Async<Option<IpList>>, Self::Error> {
         use self::State::*;
         loop {
@@ -203,7 +203,7 @@ impl<R: Resolve> fmt::Debug for IntervalResolver<R> {
     }
 }
 
-impl<R: ResolveHost> fmt::Debug for IntervalHostResolver<R> {
+impl<R: HostResolve> fmt::Debug for IntervalHostResolver<R> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("InternalHostResolver")
         .field("last_value", &self.last_value)

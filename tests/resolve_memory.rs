@@ -7,7 +7,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use futures::Future;
-use abstract_ns::{ResolveHost, Resolve};
+use abstract_ns::{HostResolve, Resolve};
 use ns_router::{Config, Router};
 
 

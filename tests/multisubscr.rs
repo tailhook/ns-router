@@ -10,7 +10,7 @@ use futures::future::{Future, Empty, IntoStream, empty};
 use futures::future::{FutureResult, ok};
 use futures::stream::{once, Stream, Chain, Once};
 use abstract_ns::{HostSubscribe, Subscribe, Name, Address, IpList, Error};
-use abstract_ns::{Resolve, ResolveHost};
+use abstract_ns::{Resolve, HostResolve};
 use ns_router::{Config, Router};
 
 
@@ -18,9 +18,9 @@ use ns_router::{Config, Router};
 struct Mock;
 
 
-impl ResolveHost for Mock {
-    type FutureHost = FutureResult<IpList, Error>;
-    fn resolve_host(&self, _name: &Name) -> Self::FutureHost {
+impl HostResolve for Mock {
+    type HostFuture = FutureResult<IpList, Error>;
+    fn resolve_host(&self, _name: &Name) -> Self::HostFuture {
         ok(vec!["127.0.0.1".parse().unwrap()].into())
     }
 }
@@ -36,7 +36,7 @@ impl Resolve for Mock {
 impl HostSubscribe for Mock {
     type HostStream = Chain<Once<IpList, Error>,
                             IntoStream<Empty<IpList, Error>>>;
-    type Error = Error;
+    type HostError = Error;
     fn subscribe_host(&self, _name: &Name) -> Self::HostStream {
         once(Ok(vec!["127.0.0.1".parse().unwrap()].into()))
             .chain(empty().into_stream())

@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use futures::{lazy};
 use futures::future::{FutureResult, ok};
-use abstract_ns::{ResolveHost, Resolve, Name, Address, IpList, Error};
+use abstract_ns::{HostResolve, Resolve, Name, Address, IpList, Error};
 use ns_router::{Config, Router};
 
 
@@ -19,16 +19,16 @@ struct Mock;
 struct Mock2;
 
 
-impl ResolveHost for Mock {
-    type FutureHost = FutureResult<IpList, Error>;
-    fn resolve_host(&self, _name: &Name) -> Self::FutureHost {
+impl HostResolve for Mock {
+    type HostFuture = FutureResult<IpList, Error>;
+    fn resolve_host(&self, _name: &Name) -> Self::HostFuture {
         ok(vec!["127.0.0.1".parse().unwrap()].into())
     }
 }
 
-impl ResolveHost for Mock2 {
-    type FutureHost = FutureResult<IpList, Error>;
-    fn resolve_host(&self, _name: &Name) -> Self::FutureHost {
+impl HostResolve for Mock2 {
+    type HostFuture = FutureResult<IpList, Error>;
+    fn resolve_host(&self, _name: &Name) -> Self::HostFuture {
         ok(vec!["127.0.0.2".parse().unwrap()].into())
     }
 }

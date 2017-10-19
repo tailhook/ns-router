@@ -2,7 +2,7 @@ use std::fmt::{Debug};
 use std::sync::Arc;
 
 use abstract_ns::{Address, IpList, Name, Error};
-use abstract_ns::{ResolveHost, Resolve, HostSubscribe, Subscribe};
+use abstract_ns::{HostResolve, Resolve, HostSubscribe, Subscribe};
 use futures::{Future, Async};
 use futures::sync::oneshot;
 use void::Void;
@@ -42,7 +42,7 @@ pub struct NullResolver;
 
 
 impl<R:Debug + 'static> Wrapper<R>
-    where R: Resolve + ResolveHost + Subscribe + HostSubscribe
+    where R: Resolve + HostResolve + Subscribe + HostSubscribe
 {
     pub fn new(resolver: R) -> Wrapper<R> {
         Wrapper {
@@ -52,7 +52,7 @@ impl<R:Debug + 'static> Wrapper<R>
 }
 
 impl<R:Debug + 'static> Resolver for Wrapper<R>
-    where R: Resolve + ResolveHost + Subscribe + HostSubscribe
+    where R: Resolve + HostResolve + Subscribe + HostSubscribe
 {
     fn resolve_host(&self, res: &mut ResolverFuture, _cfg: &Arc<Config>,
         name: Name, tx: oneshot::Sender<Result<IpList, Error>>)
