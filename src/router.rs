@@ -85,11 +85,11 @@ impl Router {
 
     pub(crate) fn subscribe_stream<S>(&self,
         stream: S, tx: slot::Sender<Address>)
-        where S: Stream<Item=Vec<InternalName>> + 'static,
+        where S: Stream<Item=Vec<InternalName>> + Send + Sync + 'static,
               S::Error: fmt::Display,
     {
         self.requests.unbounded_send(
-            Request::Task(Wrapper::wrap(MultiSubscr::new(stream, tx))))
+            Request::Task(Wrapper::wrap_send(MultiSubscr::new(stream, tx))))
             // can't do anything when resolver is down, (no error in stream)
             // but this will shut down stream which will be visible
             // for the appplication, which is probably shutting down anyway
@@ -148,7 +148,7 @@ impl Router {
     /// presumably shutting down everything that depends on it.
     pub fn subscribe_many_stream<'x, S>(&self, stream: S, default_port: u16)
         -> AddrStream
-        where S: Stream + 'static,
+        where S: Stream + Send + Sync + 'static,
               S::Item: IntoIterator,
               S::Error: fmt::Display,
               <S::Item as IntoIterator>::Item: Into<AutoName<'x>>,

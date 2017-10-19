@@ -25,3 +25,6 @@ pub use router::Router;
 pub use config::Config;
 pub use name::AutoName;
 pub use subscribe_ext::SubscribeExt;
+
+trait AssertTraits: Clone + Send + Sync {}
+impl AssertTraits for Router {}

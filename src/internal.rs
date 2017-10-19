@@ -14,8 +14,11 @@ pub(crate) enum Request {
     Resolve(Name, oneshot::Sender<Result<Address, Error>>),
     HostSubscribe(Name, slot::Sender<IpList>),
     Subscribe(Name, slot::Sender<Address>),
-    Task(Box<Continuation>),
+    Task(Box<Continuation+Send>),
 }
+
+trait AssertTraits: Send {}
+impl AssertTraits for Request {}
 
 pub fn reply<X: Send + fmt::Debug + 'static>(name: &Name,
     tx: oneshot::Sender<Result<X, Error>>, value: X)

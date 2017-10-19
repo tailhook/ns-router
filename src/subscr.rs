@@ -63,6 +63,12 @@ impl<T: Task> fmt::Debug for Wrapper<T> {
     }
 }
 
+impl<T: Task + Send + 'static> Wrapper<T> {
+    pub(crate) fn wrap_send(task: T) -> Box<Continuation + Send> {
+        Box::new(Wrapper(Some(task))) as Box<Continuation + Send>
+    }
+}
+
 impl<T: Task + 'static> Wrapper<T> {
     pub(crate) fn wrap(task: T) -> Box<Continuation> {
         Box::new(Wrapper(Some(task))) as Box<Continuation>
