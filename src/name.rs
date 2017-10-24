@@ -65,6 +65,26 @@ pub enum AutoName<'a> {
     SocketAddr(SocketAddr),
 }
 
+
+/// A helper trait to convert anything (yielded by a Stream) into name
+///
+/// The idea is that if you have a `Stream<Item=Vec<String>>` or vec of
+/// other things that are convertible into an `AutoName` you can pass this
+/// stream without copying anything. This is identical to `IntoIterator` but
+/// works by borrowing object.
+///
+/// Used for [`subscribe_stream`] method.
+///
+/// [`subscribe_stream`]: struct.Router.html#method.subscribe_stream
+pub trait IntoNameIter<'a> {
+    /// Item type, must be convertible into `AutoName`
+    type Item: Into<AutoName<'a>>;
+    /// Iterator type
+    type IntoIter: Iterator<Item=Self::Item>;
+    /// Borrow a iterator over the names from this type
+    fn into_name_iter(&'a self) -> Self::IntoIter;
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub(crate) enum InternalName {
     HostPort(Name, u16),
@@ -117,6 +137,18 @@ impl<'a> From<&'a str> for AutoName<'a> {
         AutoName::Auto(val)
     }
 }
+
+impl<'a, T: 'a> IntoNameIter<'a> for T
+    where &'a T: IntoIterator,
+          <&'a T as IntoIterator>::Item: Into<AutoName<'a>>,
+{
+    type Item = <&'a T as IntoIterator>::Item;
+    type IntoIter = <&'a T as IntoIterator>::IntoIter;
+    fn into_name_iter(&'a self) -> Self::IntoIter {
+        self.into_iter()
+    }
+}
+
 
 impl Into<abstract_ns::Error> for Error {
     fn into(self) -> abstract_ns::Error {

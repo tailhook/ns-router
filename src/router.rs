@@ -17,7 +17,7 @@ use future::{AddrStream, ResolveFuture, HostStream, ResolveHostFuture};
 use future::{UpdateSink};
 use internal::{fail, Request};
 use multisubscr::MultiSubscr;
-use name::{AutoName, InternalName};
+use name::{AutoName, InternalName, IntoNameIter};
 use slot;
 use subscr::Wrapper;
 
@@ -83,9 +83,9 @@ impl Router {
         );
     }
 
-    pub(crate) fn subscribe_stream<S>(&self,
+    pub(crate) fn _subscribe_stream<S>(&self,
         stream: S, tx: slot::Sender<Address>)
-        where S: Stream<Item=Vec<InternalName>> + Send + Sync + 'static,
+        where S: Stream<Item=Vec<InternalName>> + Send + 'static,
               S::Error: fmt::Display,
     {
         self.requests.unbounded_send(
@@ -127,7 +127,7 @@ impl Router {
                 }
             }
         }
-        self.subscribe_stream(
+        self._subscribe_stream(
             once(Ok::<_, Void>(lst)).chain(empty().into_stream()), tx);
         AddrStream(rx)
     }
@@ -146,15 +146,16 @@ impl Router {
     /// Note 2: If stream is errored or end-of-stream reached, this means
     /// name is not needed any more and its `AddrStream` will be shut down,
     /// presumably shutting down everything that depends on it.
+    #[deprecated(since="0.1.1", note="use subscribe_stream()")]
     pub fn subscribe_many_stream<'x, S>(&self, stream: S, default_port: u16)
         -> AddrStream
-        where S: Stream + Send + Sync + 'static,
+        where S: Stream + Send + 'static,
               S::Item: IntoIterator,
               S::Error: fmt::Display,
               <S::Item as IntoIterator>::Item: Into<AutoName<'x>>,
     {
         let (tx, rx) = slot::channel();
-        self.subscribe_stream(stream.map(move |iter| {
+        self._subscribe_stream(stream.map(move |iter| {
             let mut lst = Vec::new();
             for addr in iter {
                 match addr.into().parse(default_port) {
@@ -168,6 +169,43 @@ impl Router {
         }), tx);
         AddrStream(rx)
     }
+    /// Subscribes to a stream that yields lists of names
+    ///
+    /// See the description of [`subscribe_many`](#tymethod.subscribe_many)
+    /// for the description of the list of names that must be yielded from
+    /// the stream.
+    ///
+    /// Note: this is meant for configuration update scenario. I.e. when
+    /// configuration is reloaded and new list of names is received, it
+    /// should be pushed to this stream. The items received in the stream
+    /// are non-cumulative and replace previous list.
+    ///
+    /// Note 2: If stream is errored or end-of-stream reached, this means
+    /// name is not needed any more and its `AddrStream` will be shut down,
+    /// presumably shutting down everything that depends on it.
+    pub fn subscribe_stream<S>(&self, stream: S, default_port: u16)
+        -> AddrStream
+        where S: Stream + Send + 'static,
+              S::Error: fmt::Display,
+              for<'x> S::Item: IntoNameIter<'x>,
+    {
+        let (tx, rx) = slot::channel();
+        self._subscribe_stream(stream.map(move |iter| {
+            let mut lst = Vec::new();
+            for addr in iter.into_name_iter() {
+                match addr.into().parse(default_port) {
+                    Ok(x) => lst.push(x),
+                    Err(e) => {
+                        warn!("Error parsing name: {}", e);
+                        //unimplemented!();
+                    }
+                }
+            }
+            lst
+        }), tx);
+        AddrStream(rx)
+    }
+
     /// Resolve a string or other things into an address
     ///
     /// See description of [`subscribe_many`] to find out how names are parsed
@@ -300,6 +338,8 @@ impl Subscribe for Router {
 #[cfg(test)]
 #[allow(dead_code)]
 mod type_test {
+    use std::sync::Arc;
+    use futures::Stream;
     use name::AutoName;
     use super::Router;
 
@@ -317,5 +357,66 @@ mod type_test {
 
     fn test_map_auto(r: &Router, v: Vec<&str>) {
         r.subscribe_many(v.into_iter().map(AutoName::Auto), 1);
+    }
+
+    #[derive(Debug)]
+    enum MyName {
+        Auto(String),
+        Service(String),
+    }
+
+    #[derive(Debug)]
+    struct List1(Arc<Vec<MyName>>);
+
+    #[derive(Debug)]
+    struct List2(Arc<Vec<MyName>>);
+
+    impl<'a> IntoIterator for &'a List1 {
+        type Item = AutoName<'a>;
+        type IntoIter = ::std::iter::Map<::std::slice::Iter<'a, MyName>, fn(&'a MyName) -> AutoName<'a>>;
+        fn into_iter(self) -> Self::IntoIter {
+            self.0.iter().map(|x| x.into())
+        }
+    }
+
+    impl<'a> IntoIterator for &'a List2 {
+        type Item = &'a MyName;
+        type IntoIter = ::std::slice::Iter<'a, MyName>;
+        fn into_iter(self) -> Self::IntoIter {
+            self.0.iter()
+        }
+    }
+
+    impl<'a> Into<AutoName<'a>> for &'a MyName {
+        fn into(self) -> AutoName<'a> {
+            match *self {
+                MyName::Auto(ref x) => AutoName::Auto(x),
+                MyName::Service(ref x) => AutoName::Service(x),
+            }
+        }
+    }
+
+    fn test_subscribe_vec<S>(r: &Router, s: S)
+        where S: Stream<Item=Vec<String>, Error=String> + Send + 'static
+    {
+        r.subscribe_stream(s, 80);
+    }
+
+    fn test_subscribe_vec_custom<S>(r: &Router, s: S)
+        where S: Stream<Item=Vec<MyName>, Error=String> + Send + 'static
+    {
+        r.subscribe_stream(s, 80);
+    }
+
+    fn test_subscribe_arc_vec1<S>(r: &Router, s: S)
+        where S: Stream<Item=List1, Error=String> + Send + 'static
+    {
+        r.subscribe_stream(s, 80);
+    }
+
+    fn test_subscribe_arc_vec2<S>(r: &Router, s: S)
+        where S: Stream<Item=List2, Error=String> + Send + 'static
+    {
+        r.subscribe_stream(s, 80);
     }
 }
