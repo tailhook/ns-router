@@ -1,10 +1,10 @@
 use std::fmt;
 
 use abstract_ns::{Name, Error, Address, IpList};
+use async_slot as slot;
 use futures::sync::oneshot;
 
 use coroutine::{Continuation};
-use slot;
 
 
 #[derive(Debug)]

@@ -18,7 +18,7 @@ use future::{UpdateSink};
 use internal::{fail, Request};
 use multisubscr::MultiSubscr;
 use name::{AutoName, InternalName, IntoNameIter};
-use slot;
+use async_slot as slot;
 use subscr::Wrapper;
 
 /// An actual router class

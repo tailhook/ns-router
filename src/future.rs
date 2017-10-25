@@ -7,7 +7,7 @@ use futures::sync::oneshot;
 use futures::{Future, Async, Stream};
 use void::Void;
 
-use slot;
+use async_slot as slot;
 use config::Config;
 
 /// A future returned from `Router::resolve_host`

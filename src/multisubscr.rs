@@ -6,14 +6,13 @@ use std::sync::Arc;
 
 use abstract_ns::{IpList, Address};
 use abstract_ns::addr::union;
+use async_slot as slot;
 use futures::{Stream, Future, Async};
 use tokio_core::reactor::Timeout;
-use void::{unreachable};
 
 use config::Config;
 use coroutine::{ResolverFuture, get_suffix};
 use name::InternalName;
-use slot;
 use subscr::{Task, TaskResult, SubscrFuture};
 
 
@@ -196,7 +195,7 @@ impl<S: Stream<Item=Vec<InternalName>> + 'static> Task for MultiSubscr<S>
                 Host(ref mut s, ref mut v, _) => {
                     loop {
                         match s.poll() {
-                            Err(e) => unreachable(e),
+                            Err(()) => unreachable!(), // slot doesn't fail
                             Ok(Async::Ready(Some(x))) => {
                                 if Some(&x) != v.as_ref() {
                                     *v = Some(x);
@@ -211,7 +210,7 @@ impl<S: Stream<Item=Vec<InternalName>> + 'static> Task for MultiSubscr<S>
                 Addr(ref mut s, ref mut v) => {
                     loop {
                         match s.poll() {
-                            Err(e) => unreachable(e),
+                            Err(()) => unreachable!(), // slot doesn't fail
                             Ok(Async::Ready(Some(x))) => {
                                 if Some(&x) != v.as_ref() {
                                     *v = Some(x);

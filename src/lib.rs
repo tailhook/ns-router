@@ -101,6 +101,7 @@
 #![warn(missing_debug_implementations)]
 
 extern crate abstract_ns;
+extern crate async_slot;
 extern crate futures;
 extern crate tokio_core;
 extern crate void;
@@ -114,7 +115,6 @@ mod internal_traits;
 mod multisubscr;
 mod name;
 mod router;
-mod slot;  // TODO(tailhook) it should be added to futures-rs
 mod subscr;
 pub mod future;
 pub mod subscribe_ext;

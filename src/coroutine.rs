@@ -3,6 +3,7 @@ use std::sync::{Arc};
 use std::mem;
 
 use abstract_ns::{Address, IpList, Name, Error};
+use async_slot as slot;
 use futures::future::Shared;
 use futures::stream::FuturesUnordered;
 use futures::sync::mpsc::{UnboundedReceiver};
@@ -14,7 +15,6 @@ use void::{Void, unreachable};
 use config::Config;
 use internal_traits::Resolver;
 use internal::{Request, reply};
-use slot;
 use subscr::{SubscrFuture, HostNoOpSubscr, NoOpSubscr};
 
 

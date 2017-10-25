@@ -2,12 +2,12 @@ use std::fmt;
 use std::sync::Arc;
 
 use abstract_ns::{Name, Address, IpList, Error};
+use async_slot as slot;
 use futures::{Future, Stream, Async};
 use futures::sync::oneshot;
 use futures::future::Shared;
 use void::Void;
 
-use slot;
 use internal_traits::Resolver;
 use config::Config;
 use coroutine::{ResolverFuture, FutureResult, Continuation, get_suffix};
