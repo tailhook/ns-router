@@ -5,7 +5,7 @@ use std::mem;
 use abstract_ns::{Address, IpList, Name, Error};
 use async_slot as slot;
 use futures::future::Shared;
-use futures::stream::FuturesUnordered;
+use futures::stream::{FuturesUnordered, Fuse};
 use futures::sync::mpsc::{UnboundedReceiver};
 use futures::sync::oneshot;
 use futures::{Stream, Future, Async};
@@ -21,7 +21,7 @@ use subscr::{SubscrFuture, HostNoOpSubscr, NoOpSubscr};
 pub struct ResolverFuture {
     update_tx: oneshot::Sender<()>,
     update_rx: Shared<oneshot::Receiver<()>>,
-    requests: UnboundedReceiver<Request>,
+    requests: Fuse<UnboundedReceiver<Request>>,
     futures: FuturesUnordered<Box<Future<Item=FutureResult, Error=Void>>>,
     current_config: Option<Arc<Config>>,
     handle: Handle,
@@ -72,7 +72,7 @@ impl ResolverFuture {
             Box::new(config.into_future().then(mapper))
             as Box<Future<Item=FutureResult, Error=Void>>);
         ResolverFuture {
-            requests,
+            requests: requests.fuse(),
             update_tx: tx,
             update_rx: rx.shared(),
             futures: futures,
@@ -198,8 +198,7 @@ impl Future for ResolverFuture {
                         task.restart(self, &cfg);
                     }
                     Async::Ready(None) => {
-                        error!("Router input stream is done");
-                        return Ok(Async::Ready(()));
+                        break;
                     }
                     Async::NotReady => {
                         break;

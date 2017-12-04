@@ -84,7 +84,7 @@
 //!
 //! To show you an example how router can be configured:
 //!
-//! ```rust.ignore
+//! ```rust,ignore
 //! let cfg = &Config::new()
 //!     // resolution of hosts from memory for performance or tests
 //!     .add_host(&"localhost".parse().unwrap(),

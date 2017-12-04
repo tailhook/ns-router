@@ -24,8 +24,15 @@ use subscr::Wrapper;
 /// An actual router class
 ///
 /// Note: when router is shut down (when config stream is closed), all futures
-/// and subscriptions are canceled. We'll probably do the same when all
-/// router instances are dropped too.
+/// and subscriptions are canceled.
+///
+/// *Since 0.1.3*: when all instances of Router are dropped the underlying
+/// futures and streams continue to work, until all of them finish (for
+/// subscriptions it means subscriber is dropped). In previous versions this
+/// dropped all requests immediately. This was common source of confusion and
+/// we consider this a bug. If you want to force close all futures and
+/// subscriptions create a router with `from_stream` or `updating_config` and
+/// send EOS on stream or drop `UpdatingSink` respectively.
 #[derive(Debug, Clone)]
 pub struct Router {
     requests: UnboundedSender<Request>,
