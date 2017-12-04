@@ -18,6 +18,7 @@ use internal::{Request, reply};
 use subscr::{SubscrFuture, HostNoOpSubscr, NoOpSubscr};
 
 
+#[must_use = "futures do nothing unless polled"]
 pub struct ResolverFuture {
     update_tx: oneshot::Sender<()>,
     update_rx: Shared<oneshot::Receiver<()>>,

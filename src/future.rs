@@ -12,23 +12,28 @@ use config::Config;
 
 /// A future returned from `Router::resolve_host`
 #[derive(Debug)]
+#[must_use = "futures do nothing unless polled"]
 pub struct ResolveHostFuture(
     pub(crate) oneshot::Receiver<Result<IpList, Error>>);
 
 /// A future returned from `Router::resolve`
 #[derive(Debug)]
+#[must_use = "futures do nothing unless polled"]
 pub struct ResolveFuture(pub(crate) oneshot::Receiver<Result<Address, Error>>);
 
 /// A stream returned from `Router::host_subscribe`
 #[derive(Debug)]
+#[must_use = "streams do nothing unless polled"]
 pub struct HostStream(pub(crate) slot::Receiver<IpList>);
 
 /// A stream returned from `Router::subscribe`
 #[derive(Debug)]
+#[must_use = "streams do nothing unless polled"]
 pub struct AddrStream(pub(crate) slot::Receiver<Address>);
 
 /// A sink that updates router created using `Router::updating_config`
 #[derive(Debug)]
+#[must_use = "sinks do nothing unless polled"]
 pub struct UpdateSink(pub(crate) slot::Sender<Arc<Config>>);
 
 

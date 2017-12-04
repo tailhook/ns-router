@@ -29,6 +29,7 @@ pub trait Resolver: Debug + 'static {
         name: Name, tx: slot::Sender<Address>);
 }
 
+#[must_use = "futures do nothing unless polled"]
 struct SendResult<F: Future>(Name, F,
     Option<oneshot::Sender<Result<F::Item, Error>>>);
 

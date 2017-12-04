@@ -13,6 +13,7 @@ use config::Config;
 use coroutine::{ResolverFuture, FutureResult, Continuation, get_suffix};
 
 
+#[must_use = "futures do nothing unless polled"]
 pub(crate) struct SubscrFuture<F: Task> {
     pub update_rx: Shared<oneshot::Receiver<()>>,
     pub task: Option<F>,

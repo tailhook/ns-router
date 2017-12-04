@@ -351,19 +351,19 @@ mod type_test {
     use super::Router;
 
     fn test_vec_string(r: &Router, v: Vec<String>) {
-        r.subscribe_many(&v, 1);
+        drop(r.subscribe_many(&v, 1));
     }
 
     fn test_vec_str(r: &Router, v: Vec<&str>) {
-        r.subscribe_many(&v, 1);
+        drop(r.subscribe_many(&v, 1));
     }
 
     fn test_vec_auto(r: &Router, v: Vec<AutoName>) {
-        r.subscribe_many(v, 1);
+        drop(r.subscribe_many(v, 1));
     }
 
     fn test_map_auto(r: &Router, v: Vec<&str>) {
-        r.subscribe_many(v.into_iter().map(AutoName::Auto), 1);
+        drop(r.subscribe_many(v.into_iter().map(AutoName::Auto), 1));
     }
 
     #[derive(Debug)]
@@ -406,24 +406,24 @@ mod type_test {
     fn test_subscribe_vec<S>(r: &Router, s: S)
         where S: Stream<Item=Vec<String>, Error=String> + Send + 'static
     {
-        r.subscribe_stream(s, 80);
+        drop(r.subscribe_stream(s, 80));
     }
 
     fn test_subscribe_vec_custom<S>(r: &Router, s: S)
         where S: Stream<Item=Vec<MyName>, Error=String> + Send + 'static
     {
-        r.subscribe_stream(s, 80);
+        drop(r.subscribe_stream(s, 80));
     }
 
     fn test_subscribe_arc_vec1<S>(r: &Router, s: S)
         where S: Stream<Item=List1, Error=String> + Send + 'static
     {
-        r.subscribe_stream(s, 80);
+        drop(r.subscribe_stream(s, 80));
     }
 
     fn test_subscribe_arc_vec2<S>(r: &Router, s: S)
         where S: Stream<Item=List2, Error=String> + Send + 'static
     {
-        r.subscribe_stream(s, 80);
+        drop(r.subscribe_stream(s, 80));
     }
 }
