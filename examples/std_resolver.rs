@@ -17,7 +17,7 @@ fn main() {
             .interval_subscriber(Duration::new(1, 0), &core.handle()))
         .done(),
         &core.handle());
-    for name in env::args() {
+    for name in env::args().skip(1) {
         let value = core.run(ns.resolve_auto(&name, 80));
         println!("{} resolves to {:?}", name, value);
     }
