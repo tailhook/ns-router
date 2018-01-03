@@ -5,6 +5,7 @@ use abstract_ns::{Name, Address, IpList, Error};
 use async_slot as slot;
 use futures::{Future, Stream, Async};
 use futures::sync::oneshot;
+use futures::stream::Fuse;
 use futures::future::Shared;
 use void::Void;
 
@@ -35,14 +36,14 @@ pub(crate) trait Task {
 pub(crate) struct Subscr<S: Stream<Item=Address>> {
     pub name: Name,
     pub subscriber: Arc<Resolver>,
-    pub source: S,
+    pub source: Fuse<S>,
     pub tx: slot::Sender<Address>,
 }
 
 pub(crate) struct HostSubscr<S: Stream<Item=IpList>> {
     pub name: Name,
     pub subscriber: Arc<Resolver>,
-    pub source: S,
+    pub source: Fuse<S>,
     pub tx: slot::Sender<IpList>,
 }
 
@@ -131,7 +132,7 @@ impl<S: Stream<Item=Address> + 'static> Task for Subscr<S>
             return;
         }
         let nsub = get_suffix(cfg, self.name.as_ref());
-        if !Arc::ptr_eq(nsub, &self.subscriber) {
+        if !Arc::ptr_eq(nsub, &self.subscriber) || self.source.is_done() {
             nsub.subscribe(res, nsub, cfg, self.name, self.tx);
         } else {
             SubscrFuture::spawn_in(res, self)
@@ -180,7 +181,7 @@ impl<S: Stream<Item=IpList> + 'static> Task for HostSubscr<S>
             return;
         }
         let ref nsub = get_suffix(cfg, self.name.as_ref());
-        if !Arc::ptr_eq(nsub, &self.subscriber) {
+        if !Arc::ptr_eq(nsub, &self.subscriber) || self.source.is_done() {
             nsub.host_subscribe(res, nsub, cfg, self.name, self.tx);
         } else {
             SubscrFuture::spawn_in(res, self)

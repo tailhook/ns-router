@@ -4,7 +4,7 @@ use std::sync::Arc;
 use abstract_ns::{Address, IpList, Name, Error};
 use abstract_ns::{HostResolve, Resolve, HostSubscribe, Subscribe};
 use async_slot as slot;
-use futures::{Future, Async};
+use futures::{Future, Async, Stream};
 use futures::sync::oneshot;
 use void::Void;
 
@@ -85,7 +85,7 @@ impl<R:Debug + 'static> Resolver for Wrapper<R>
             update_rx,
             task: Some(Subscr {
                 subscriber: sub.clone(),
-                source: self.resolver.subscribe(&name),
+                source: self.resolver.subscribe(&name).fuse(),
                 name, tx,
             }),
         });
@@ -100,7 +100,7 @@ impl<R:Debug + 'static> Resolver for Wrapper<R>
             update_rx,
             task: Some(HostSubscr {
                 subscriber: sub.clone(),
-                source: self.resolver.subscribe_host(&name),
+                source: self.resolver.subscribe_host(&name).fuse(),
                 name, tx,
             }),
         });
