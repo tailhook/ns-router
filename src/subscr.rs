@@ -5,10 +5,10 @@ use abstract_ns::{Name, Address, IpList, Error};
 use async_slot as slot;
 use futures::{Future, Stream, Async};
 use futures::sync::oneshot;
-use futures::stream::Fuse;
 use futures::future::Shared;
 use void::Void;
 
+use fuse::Fuse;
 use internal_traits::Resolver;
 use config::Config;
 use coroutine::{ResolverFuture, FutureResult, Continuation, get_suffix};

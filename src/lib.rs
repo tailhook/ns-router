@@ -110,6 +110,7 @@ extern crate void;
 
 mod config;
 mod coroutine;
+mod fuse;
 mod internal;
 mod internal_traits;
 mod multisubscr;

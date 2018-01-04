@@ -4,12 +4,13 @@ use std::sync::Arc;
 use abstract_ns::{Address, IpList, Name, Error};
 use abstract_ns::{HostResolve, Resolve, HostSubscribe, Subscribe};
 use async_slot as slot;
-use futures::{Future, Async, Stream};
+use futures::{Future, Async};
 use futures::sync::oneshot;
 use void::Void;
 
 use config::Config;
 use coroutine::{ResolverFuture, FutureResult};
+use fuse::Fuse;
 use subscr::{SubscrFuture, HostSubscr, Subscr, NoOpSubscr, HostNoOpSubscr};
 use internal::{reply, fail};
 
@@ -85,7 +86,7 @@ impl<R:Debug + 'static> Resolver for Wrapper<R>
             update_rx,
             task: Some(Subscr {
                 subscriber: sub.clone(),
-                source: self.resolver.subscribe(&name).fuse(),
+                source: Fuse::new(self.resolver.subscribe(&name)),
                 name, tx,
             }),
         });
@@ -100,7 +101,7 @@ impl<R:Debug + 'static> Resolver for Wrapper<R>
             update_rx,
             task: Some(HostSubscr {
                 subscriber: sub.clone(),
-                source: self.resolver.subscribe_host(&name).fuse(),
+                source: Fuse::new(self.resolver.subscribe_host(&name)),
                 name, tx,
             }),
         });
