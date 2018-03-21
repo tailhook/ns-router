@@ -8,7 +8,7 @@ readme = "README.md"
 keywords = ["name", "service", "dns", "service", "discovery"]
 homepage = "http://github.com/tailhook/ns-router"
 documentation = "http://docs.rs/ns-router"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["paul@colomiets.name"]
 
 [dependencies]
