@@ -161,12 +161,17 @@ impl<S: Stream<Item=Vec<InternalName>> + 'static> Task for MultiSubscr<S>
             Async::Ready(()) => return TaskResult::Stop,
             Async::NotReady => {}
         }
-        match self.timer.poll().expect("timeout never fails") {
-            Async::Ready(Some(())) => {
-                self.timer = None;
-                updated = true;
+        let tpoll = self.timer.as_mut().map(|t| {
+            t.poll().expect("timeout never fails")
+        });
+        if let Some(poll_result) = tpoll {
+            match poll_result {
+                Async::Ready(()) => {
+                    self.timer = None;
+                    updated = true;
+                }
+                Async::NotReady => {}
             }
-            Async::Ready(None) | Async::NotReady => {}
         }
         loop {
             match self.input.poll() {
