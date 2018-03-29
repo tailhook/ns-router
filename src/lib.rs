@@ -1,4 +1,9 @@
 //! A full-featured router for abstract-ns
+//! ======================================
+//!
+//! [Docs](https://docs.rs/graphql-parser/) |
+//! [Github](https://github.com/tailhook/graphql-parser/) |
+//! [Crate](https://crates.io/crates/graphql-parser)
 //!
 //! A router should be an entry point for your application. It solves two
 //! purposes:
@@ -51,6 +56,7 @@
 //! ```
 //!
 //! But you may force specific mode:
+//!
 //! ```rust.ignore
 //! use ns_router::AutoName::*;
 //! ns.resolve_auto(Service("localhost"));   // resolve bare `localhost` as SRV
@@ -94,7 +100,6 @@
 //!     // use stdlib for other things
 //!     .set_fallthrough(std_resolver)
 //!     .done();
-//!
 //! ```
 //!
 #![warn(missing_docs)]
